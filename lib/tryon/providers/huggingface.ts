@@ -21,7 +21,8 @@ export async function huggingfaceRender(i: GarmentRenderInput): Promise<Buffer> 
   // drawing layer: opaque white where we allow edits, transparent elsewhere
   const m = await sharp(i.mask).greyscale().raw().toBuffer();
   const rgba = Buffer.alloc(W * H * 4);
-  for (let k = 0; k < W * H; k++) { const v = m[k] > 100 ? 255 : 0; rgba[k * 4] = rgba[k * 4 + 1] = rgba[k * 4 + 2] = 255; rgba[k * 4 + 3] = v; }
+  // The Space reads the layer as RGB (alpha dropped), so unmasked pixels must be black, not just transparent.
+  for (let k = 0; k < W * H; k++) { const v = m[k] > 100 ? 255 : 0; rgba[k * 4] = rgba[k * 4 + 1] = rgba[k * 4 + 2] = v; rgba[k * 4 + 3] = v; }
   const layer = await extend(await sharp(rgba, { raw: { width: W, height: H, channels: 4 } }).png().toBuffer(), { r: 0, g: 0, b: 0, alpha: 0 });
   const garm = await sharp(i.garmentFront).flatten({ background: "#ffffff" }).png().toBuffer();
   const blob = (b: Buffer) => new Blob([new Uint8Array(b)], { type: "image/png" });
