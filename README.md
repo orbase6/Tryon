@@ -61,6 +61,7 @@ See [`.env.example`](.env.example) for every variable with comments.
 
 Each provider is an adapter behind one env variable — no code changes:
 
+* **Free option:** `TRYON_PROVIDER=huggingface` calls the public IDM-VTON Hugging Face Space (`HF_SPACE`, optional free `HF_TOKEN` for more GPU quota). It is slow, queued and rate limited — fine for testing, not production.
 * **Try-on / inpainting** (`lib/tryon/providers/`): `TRYON_PROVIDER=gemini` + `GEMINI_API_KEY`, or `TRYON_PROVIDER=replicate` + `REPLICATE_API_TOKEN` (+ `REPLICATE_TRYON_MODEL`, default `cuuupid/idm-vton`; CatVTON style models that accept `human_img`, `garm_img`, `mask_img` work too). Add another by implementing `renderGarment` in `providers/index.ts`.
 * **Background removal** (`lib/cutout.ts`): `BG_REMOVAL_PROVIDER=removebg` (+ key), `imgly` (`npm i @imgly/background-removal-node`), or the built-in `heuristic` flood-fill (good for studio/plain backgrounds).
 * **Upscale / denoise** (`lib/imageEnhance.ts`): `sharp` Lanczos + median + sharpen, or Real-ESRGAN on Replicate.

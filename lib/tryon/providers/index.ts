@@ -2,6 +2,7 @@
 import { geminiRender } from "./gemini";
 import { replicateRender } from "./replicateTryon";
 import { mockRender } from "./mock";
+import { huggingfaceRender } from "./huggingface";
 
 export interface GarmentRenderInput {
   person: Buffer;        // PNG, full user photo
@@ -26,6 +27,7 @@ export async function renderGarment(input: GarmentRenderInput): Promise<GarmentR
   const provider = (process.env.TRYON_PROVIDER || "mock").toLowerCase();
   try {
     if (provider === "gemini") return { image: await geminiRender(input), demo: false, provider };
+    if (provider === "huggingface") return { image: await huggingfaceRender(input), demo: false, provider };
     if (provider === "replicate") return { image: await replicateRender(input), demo: false, provider };
   } catch (e) {
     console.error(`[tryon] ${provider} provider failed:`, (e as Error).message);

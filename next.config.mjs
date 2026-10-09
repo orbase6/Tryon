@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  serverExternalPackages: ["sharp", "mysql2"],
+  serverExternalPackages: ["sharp", "mysql2", "@gradio/client"],
   images: { unoptimized: true },
   experimental: { serverActions: { bodySizeLimit: "12mb" } },
   async headers() {

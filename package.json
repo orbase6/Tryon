@@ -13,6 +13,7 @@
     "seed:gen": "node scripts/gen-seed.mjs"
   },
   "dependencies": {
+    "@gradio/client": "^2.7.1",
     "@mediapipe/tasks-vision": "^1.1.0",
     "clsx": "^2.1.1",
     "framer-motion": "^14.0.0",

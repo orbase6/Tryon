@@ -20,6 +20,12 @@ import { hasTransparency, heuristicCutout } from "../cutout";
 
 export class TryOnError extends Error {}
 
+/** Soften both images before comparing so model resampling noise isn't mistaken for a changed face. */
+async function blurred(rgb: Uint8Array, W: number, H: number): Promise<Uint8Array> {
+  const out = await sharp(Buffer.from(rgb.buffer, rgb.byteOffset, rgb.length), { raw: { width: W, height: H, channels: 3 } }).blur(2.5).raw().toBuffer();
+  return new Uint8Array(out.buffer, out.byteOffset, out.length);
+}
+
 export interface RenderInput {
   cacheKey: string;            // try-on session id (garment layers are cached per session + product)
   photo: Buffer;               // normalised user photo (PNG)
@@ -83,12 +89,15 @@ export async function renderTryOn(input: RenderInput): Promise<RenderOutput> {
       });
       let out = await run();
       let cand = await loadRaw(out.image, W, H);
-      let diff = fb ? regionDiff(s.orig, cand, W, fb, mask) : 0;
+      const origSoft = fb ? await blurred(s.orig, W, H) : s.orig;
+      const drift = async (c: Uint8Array) => (fb ? regionDiff(origSoft, await blurred(c, W, H), W, fb, mask) : 0);
+      let diff = await drift(cand);
+      console.log(`[tryon] model face drift ${diff.toFixed(1)} (limit ${threshold()})`);
       if (diff > threshold()) { // safety check failed -> retry once
         notes.push(`retry (face drift ${diff.toFixed(1)})`);
         out = await run();
         cand = await loadRaw(out.image, W, H);
-        diff = fb ? regionDiff(s.orig, cand, W, fb, mask) : 0;
+        diff = await drift(cand);
         if (diff > threshold()) throw new TryOnError("The AI result changed the face too much, so it was rejected. Please try again or use a clearer photo.");
       }
       demo = demo || out.demo;
