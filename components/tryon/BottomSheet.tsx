@@ -41,7 +41,7 @@ export function BottomSheet({ children }: { children: React.ReactNode }) {
         </div>
         <button className="icon-btn absolute right-3 top-2" aria-label="Close try-on" onPointerDown={(e) => e.stopPropagation()} onClick={() => setSheet("closed")}><X className="w-5 h-5" /></button>
       </div>
-      <div className="overflow-y-auto overscroll-contain px-4 pb-10" style={{ height: full - PEEK + 8, touchAction: "pan-y" }}>{children}</div>
+      <div className="overflow-y-auto overscroll-contain px-4 pb-10" style={{ height: Math.max(120, full - y[sheet === "closed" ? "peek" : sheet] - PEEK + 8 - 8), touchAction: "pan-y" }}>{children}</div>
     </motion.div>
   );
 }

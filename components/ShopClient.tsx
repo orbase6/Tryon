@@ -134,7 +134,7 @@ export function ShopClient({ categories, subcategories, brands: allBrands, initi
         <aside className="hidden w-60 shrink-0 xl:block" aria-label="Filters"><div className="sticky top-[84px] rounded-xl2 border border-line bg-card p-4">{filterPanel}</div></aside>
         <div className="min-w-0 flex-1">
           {error && <p role="alert" className="mb-4 rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300">{error} <button className="underline" onClick={() => load(1, true)}>Retry</button></p>}
-          <div className="grid grid-cols-2 gap-3 sm:gap-4 md:[grid-template-columns:repeat(auto-fill,minmax(200px,1fr))]">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 md:[grid-template-columns:repeat(auto-fill,minmax(160px,1fr))]">
             {items.map((p, i) => <ProductCard key={p.id} p={p} index={i} />)}
             {loading && Array.from({ length: items.length ? 4 : 8 }).map((_, i) => <CardSkeleton key={`s${i}`} />)}
           </div>

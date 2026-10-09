@@ -45,6 +45,7 @@ export class LiveEngine {
   private pose: LM[] | null = null; private face: LM[] | null = null; private hands: LM[][] = [];
   private lastSeen = { pose: 0, face: 0, hands: 0 };
   private lostState = false;
+  private skip = 0; private avgCost = 0;
   private fpsT = performance.now(); private fpsN = 0; fps = 0;
   mirrored = true;
 
@@ -79,7 +80,7 @@ export class LiveEngine {
 
   private resize() {
     const cw = this.canvas.clientWidth, ch = this.canvas.clientHeight;
-    const dpr = Math.min(window.devicePixelRatio || 1, 1.5), cap = 1280;
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5), cap = 1080;
     let w = Math.round(cw * dpr), h = Math.round(ch * dpr);
     const k = Math.min(1, cap / Math.max(w, h)); w = Math.round(w * k); h = Math.round(h * k);
     if (this.canvas.width !== w || this.canvas.height !== h) { this.canvas.width = w; this.canvas.height = h; }
@@ -89,11 +90,16 @@ export class LiveEngine {
     const v = this.video, n = this.needs();
     const both = n.pose && n.face;
     const f = this.frame++;
+    if (f % (this.skip + 1) !== 0) return; // adaptive: skip detection frames on slow devices
+    const t0 = performance.now();
     try {
       if (n.pose && (!both || f % 2 === 0)) { const r = getPoseSync()?.detectForVideo(v, t); if (r?.landmarks[0]) { this.pose = r.landmarks[0]; this.lastSeen.pose = t; } }
       if (n.face && (!both || f % 2 === 1)) { const r = getFaceSync()?.detectForVideo(v, t); if (r?.faceLandmarks[0]) { this.face = r.faceLandmarks[0]; this.lastSeen.face = t; } }
       if (n.hands && f % 2 === 0) { const r = getHandsSync()?.detectForVideo(v, t); this.hands = r?.landmarks ?? []; if (this.hands.length) this.lastSeen.hands = t; }
     } catch { /* a dropped frame is fine */ }
+    const cost = performance.now() - t0;
+    this.avgCost = this.avgCost * 0.8 + cost * 0.2;
+    this.skip = this.avgCost > 70 ? 2 : this.avgCost > 34 ? 1 : 0;
     const stale = (k: "pose" | "face" | "hands", need: boolean) => need && t - this.lastSeen[k] > 1200;
     const lost = this.items.length > 0 && (stale("pose", n.pose) || stale("face", n.face) || stale("hands", n.hands && !n.pose && !n.face));
     if (lost !== this.lostState) { this.lostState = lost; this.onLost(lost); }

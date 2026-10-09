@@ -12,5 +12,5 @@ export default async function ShopPage({ searchParams }: { searchParams: Promise
   const category = categories.some((c) => c.slug === sp.category) ? sp.category : undefined;
   const sort = (["newest", "price_asc", "price_desc", "rating"].includes(sp.sort ?? "") ? sp.sort : "newest") as "newest";
   const initial = await listProducts({ category, sub: sp.sub, q: sp.q?.slice(0, 80), sort, pageSize: 12, page: 1 });
-  return <ShopClient categories={categories} subcategories={subcategories} brands={brands} initial={{ ...initial, params: { category: category ?? "", sub: sp.sub ?? "", q: sp.q ?? "", sort } }} />;
+  return <ShopClient key={sp.q ?? ""} categories={categories} subcategories={subcategories} brands={brands} initial={{ ...initial, params: { category: category ?? "", sub: sp.sub ?? "", q: sp.q ?? "", sort } }} />;
 }

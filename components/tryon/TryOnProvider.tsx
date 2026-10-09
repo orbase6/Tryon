@@ -54,6 +54,8 @@ export function TryOnProvider({ children }: { children: React.ReactNode }) {
   const abort = useRef<AbortController | null>(null);
   const seq = useRef(0);
 
+  useEffect(() => { if (window.innerWidth < 1024) setCollapsed(true); }, []); // tablets start with the panel collapsed
+
   useEffect(() => { // restore the photo session after reloads
     try { const s = JSON.parse(sessionStorage.getItem(SS) || "null"); if (s?.sessionId) { setSessionId(s.sessionId); setPhotoUrl(s.photoUrl); } } catch { /* ignore */ }
   }, []);

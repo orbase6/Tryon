@@ -40,7 +40,7 @@ export function LiveTryOn() {
     stream.current?.getTracks().forEach((s) => s.stop());
     if (!navigator.mediaDevices?.getUserMedia) { setError(!window.isSecureContext ? "Camera access needs a secure (HTTPS) connection. Open this site over HTTPS (or localhost)." : "This browser does not support camera access."); return; }
     try {
-      const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: face }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+      const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: face }, ...(window.innerHeight > window.innerWidth ? { width: { ideal: 720 }, height: { ideal: 1280 } } : { width: { ideal: 1280 }, height: { ideal: 720 } }) }, audio: false });
       stream.current = s;
       const v = video.current!; v.srcObject = s; await v.play();
       if (engine.current) engine.current.mirrored = face === "user";

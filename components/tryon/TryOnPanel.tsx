@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
 import { Camera, ChevronLeft, ChevronRight, Download, ImagePlus, Loader2, RotateCcw, ShieldCheck, Upload, X, Bookmark, Check } from "lucide-react";
@@ -13,10 +13,12 @@ function Content() {
   const t = useTryOn();
   const { toast } = useStore();
   const input = useRef<HTMLInputElement>(null);
+  const stage = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState(false);
   const [share, setShare] = useState(false);
   const busy = t.status === "analyzing" || t.status === "uploading" || t.status === "rendering";
   const shown = t.resultUrl ?? t.photoUrl;
+  useEffect(() => { if (shown) stage.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [shown]);
 
   const pickFile = (f?: File | null) => {
     if (!f) return;
@@ -28,9 +30,10 @@ function Content() {
   return (
     <div className="space-y-4">
       <div
+        ref={stage} style={{ width: "min(100%, calc(50vh * 0.75))", aspectRatio: "3 / 4" }}
         onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)}
         onDrop={(e) => { e.preventDefault(); setDrag(false); pickFile(e.dataTransfer.files[0]); }}
-        className={cn("relative aspect-[3/4] w-full overflow-hidden rounded-2xl border border-dashed border-line bg-bg/60 transition", drag && "border-brand bg-brand/10")}>
+        className={cn("relative mx-auto overflow-hidden rounded-2xl border border-dashed border-line bg-bg/60 transition", drag && "border-brand bg-brand/10")}>
         {shown ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={shown} alt={t.resultUrl ? "Your try-on result" : "Your photo"} className="h-full w-full object-contain" />

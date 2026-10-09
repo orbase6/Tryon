@@ -1,4 +1,4 @@
-import { Glasses, Sparkles, Watch, Gem, Shirt, Brush } from "lucide-react";
+import { Glasses, Sparkles, Watch, Gem, Crown, Brush, ShoppingBag } from "lucide-react";
 
 export function Hanger({ className = "w-5 h-5" }: { className?: string }) {
   return (
@@ -16,5 +16,6 @@ export function TryOnIcon({ type, region, className = "w-5 h-5" }: { type: strin
   if (region === "eyes") return <Glasses className={className} />;
   if (region === "wrist") return <Watch className={className} />;
   if (region === "ears" || region === "finger") return <Gem className={className} />;
-  return <Shirt className={className} />;
+  if (region === "head") return <Crown className={className} />;
+  return <ShoppingBag className={className} />;
 }

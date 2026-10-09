@@ -44,7 +44,7 @@ export function AdminProducts({ categories }: { categories: { id: number; name: 
   const Thumb = ({ p }: { p: Product }) => (
     <span className="checker relative block h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-line">{p.cover_thumb && <Image src={p.cover_thumb} alt="" fill sizes="56px" className="object-contain" unoptimized />}</span>
   );
-  const Status = ({ p }: { p: Product }) => <span className={cn("rounded-full px-2.5 py-1 text-xs font-semibold", p.is_published ? "bg-emerald-500/15 text-emerald-400" : "bg-line text-muted")}>{p.is_published ? "Published" : "Draft"}</span>;
+  const Status = ({ p }: { p: Product }) => <span className={cn("inline-block self-start shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold", p.is_published ? "bg-emerald-500/15 text-emerald-400" : "bg-line text-muted")}>{p.is_published ? "Published" : "Draft"}</span>;
   const Actions = ({ p }: { p: Product }) => (
     <div className="flex items-center justify-end gap-1.5">
       <button className="icon-btn" aria-label={p.is_published ? "Unpublish" : "Publish"} title={p.is_published ? "Unpublish" : "Publish"} onClick={() => toggle(p)}>{p.is_published ? <Eye className="h-5 w-5" /> : <EyeOff className="h-5 w-5" />}</button>

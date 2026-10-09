@@ -42,6 +42,7 @@ export function ProductForm({ categories, subcategories, brands, product: p }: P
   const [extras, setExtras] = useState<(Staged | null)[]>(imgs.filter((i) => i.view === "extra").map(fromImage));
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+  const clear = () => setErr("");
 
   const cat = categories.find((c) => c.id === categoryId);
   const subs = useMemo(() => subcategories.filter((s) => s.category_id === categoryId), [subcategories, categoryId]);
@@ -113,7 +114,7 @@ export function ProductForm({ categories, subcategories, brands, product: p }: P
         <h2 className="mb-1 text-lg font-bold">Images</h2>
         <p className="mb-4 text-sm text-muted">Each upload is validated, auto-rotated, sharpened/upscaled if needed and cut out from its background. Compare original and enhanced, then approve. The storefront shows these images in this order: Front → Back → Side → Details; the try-on engine uses the cutouts.</p>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <ImageSlot label="Front" required view="front" value={front} onChange={setFront} hint="JPG/PNG/WebP · max 10 MB" />
+          <ImageSlot label="Front" required view="front" value={front} onChange={(v) => { clear(); setFront(v); }} hint="JPG/PNG/WebP · max 10 MB" />
           <ImageSlot label="Back" required={isClothing} view="back" value={back} onChange={setBack} hint={isClothing ? "Required for clothing" : "Optional"} />
           <ImageSlot label="Side" view="side" value={side} onChange={setSide} hint="Optional" />
         </div>
