@@ -46,8 +46,15 @@ export async function buildGarmentMask(a: Analysis, parsing: Parsing | null, reg
     return `<polyline points="${poly([s, mid, end])}" fill="none" stroke="#fff" stroke-width="${armW}" stroke-linecap="round" stroke-linejoin="round"/>`;
   };
   const stroke = Math.max(6, sw * 0.16);
+  // Raise the top edge towards the neck so the area between neck and shoulder tips (trapezius) is editable;
+  // otherwise a round-neck garment keeps a wide, shoulder-to-shoulder neckline of the old skin/clothes.
+  const mS = lerpPt(ls, rs, 0.5), mH = lerpPt(lh, rh, 0.5);
+  const tl = Math.hypot(mS[0] - mH[0], mS[1] - mH[1]) || 1;
+  const up: Pt = [(mS[0] - mH[0]) / tl, (mS[1] - mH[1]) / tl];
+  const along = (t: number, raise: number): Pt => { const b = lerpPt(ls, rs, t); return [b[0] + up[0] * sw * raise, b[1] + up[1] * sw * raise]; };
+  const top = [ls, along(0.2, 0.1), along(0.36, 0.09), along(0.5, 0.05), along(0.64, 0.09), along(0.8, 0.1), rs];
   const shapes =
-    `<polygon points="${poly([ls, rs, hemR, hemL])}" fill="#fff" stroke="#fff" stroke-width="${stroke}" stroke-linejoin="round"/>` +
+    `<polygon points="${poly([...top, hemR, hemL])}" fill="#fff" stroke="#fff" stroke-width="${stroke}" stroke-linejoin="round"/>` +
     sleeve(ls, le, lw) + sleeve(rs, re, rw);
   const add = await rasterize(W, H, shapes);
 

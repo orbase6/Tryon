@@ -76,7 +76,7 @@ export async function renderTryOn(input: RenderInput): Promise<RenderOutput> {
   // ---- garment (only one garment is worn at a time: the most recent pick) ----
   const g = garments[garments.length - 1];
   if (g) {
-    const key = crypto.createHash("sha1").update(`${input.cacheKey}|${g.productId}|${g.frontUrl}|${(process.env.TRYON_PROVIDER || "mock").toLowerCase()}`).digest("hex").slice(0, 24);
+    const key = crypto.createHash("sha1").update(`${input.cacheKey}|${g.productId}|${g.frontUrl}|${(process.env.TRYON_PROVIDER || "mock").toLowerCase()}|mask2`).digest("hex").slice(0, 24);
     if (await loadCache(key, s)) {
       notes.push("garment-cache");
     } else {
