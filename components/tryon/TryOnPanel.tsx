@@ -51,6 +51,7 @@ function Content() {
             </motion.div>
           )}
         </AnimatePresence>
+        {!t.demo && t.resultUrl && t.provider && t.provider !== "none" && <span className="absolute left-2 top-2 rounded-full bg-emerald-500 px-2.5 py-1 text-[11px] font-bold text-black">AI · {t.provider}</span>}
         {t.demo && t.resultUrl && <span className="absolute left-2 top-2 rounded-full bg-brand px-2.5 py-1 text-[11px] font-bold text-black">DEMO — add an AI key</span>}
       </div>
 

@@ -54,5 +54,5 @@ export async function POST(req: NextRequest) {
   }
   const url = await saveFile(`tryon/results/${randomId(10)}.png`, out.image);
   const resultId = await insertResult(sid, picks.map((p) => p.productId), url);
-  return json({ resultId, url, demo: out.demo, faceDiff: Number(out.faceDiff.toFixed(2)), notes: out.notes });
+  return json({ resultId, url, demo: out.demo, provider: out.provider, faceDiff: Number(out.faceDiff.toFixed(2)), notes: out.notes });
 }

@@ -27,7 +27,7 @@ export interface RenderInput {
   parsing: Parsing | null;
   picks: RenderPick[];
 }
-export interface RenderOutput { image: Buffer; demo: boolean; faceDiff: number; lockedChanged: number; notes: string[] }
+export interface RenderOutput { image: Buffer; demo: boolean; provider: string; faceDiff: number; lockedChanged: number; notes: string[] }
 
 const threshold = () => Number(process.env.FACE_DIFF_THRESHOLD || 14);
 
@@ -60,6 +60,7 @@ export async function renderTryOn(input: RenderInput): Promise<RenderOutput> {
   const a: Analysis = input.analysis ?? { width: W, height: H, pose: null, face: null, hands: [] };
   const notes: string[] = [];
   let demo = false;
+  let provider = "none";
   const fb = faceBox(a, input.parsing, W, H);
 
   const garments = input.picks.filter((p) => p.tryon_type === "garment");
@@ -91,6 +92,8 @@ export async function renderTryOn(input: RenderInput): Promise<RenderOutput> {
         if (diff > threshold()) throw new TryOnError("The AI result changed the face too much, so it was rejected. Please try again or use a clearer photo.");
       }
       demo = demo || out.demo;
+      provider = out.provider;
+      console.log(`[tryon] garment rendered by provider=${out.provider}${out.demo ? " (DEMO)" : ""}`);
       compositeCandidate(s, cand, mask);
       await saveCache(key, s);
     }
@@ -117,5 +120,5 @@ export async function renderTryOn(input: RenderInput): Promise<RenderOutput> {
   }
   const finalDiff = fb ? regionDiff(s.orig, s.work, W, fb, s.edit) : 0;
   if (finalDiff > 1) throw new TryOnError("Face safety check failed on the final image.");
-  return { image: await surfaceToPng(s), demo, faceDiff: finalDiff, lockedChanged: changed, notes };
+  return { image: await surfaceToPng(s), demo, provider, faceDiff: finalDiff, lockedChanged: changed, notes };
 }

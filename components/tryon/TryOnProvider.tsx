@@ -16,6 +16,7 @@ interface Ctx {
   statusText: string;
   error: string | null;
   demo: boolean;
+  provider: string;
   notes: string[];
   saved: boolean;
   collapsed: boolean; setCollapsed: (v: boolean) => void;
@@ -46,6 +47,7 @@ export function TryOnProvider({ children }: { children: React.ReactNode }) {
   const [statusText, setStatusText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [demo, setDemo] = useState(false);
+  const [provider, setProvider] = useState("");
   const [notes, setNotes] = useState<string[]>([]);
   const [saved, setSaved] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -100,7 +102,7 @@ export function TryOnProvider({ children }: { children: React.ReactNode }) {
         const data = await res.json().catch(() => ({}));
         if (my !== seq.current) return;
         if (!res.ok) { setStatus("error"); setError(data.error || "Try-on failed"); if (res.status === 404) { setSessionId(null); setPhotoUrl(null); try { sessionStorage.removeItem(SS); } catch { /* */ } } return; }
-        setResultUrl(data.url); setResultId(data.resultId); setDemo(!!data.demo); setNotes(data.notes ?? []); setSaved(false); setStatus("idle");
+        setResultUrl(data.url); setResultId(data.resultId); setDemo(!!data.demo); setProvider(data.provider ?? ""); setNotes(data.notes ?? []); setSaved(false); setStatus("idle");
       } catch (e) { if ((e as Error).name !== "AbortError" && my === seq.current) { setStatus("error"); setError((e as Error).message); } }
     }, 350);
     return () => { clearTimeout(t); ctl.abort(); };
@@ -146,9 +148,9 @@ export function TryOnProvider({ children }: { children: React.ReactNode }) {
   }, [doUpload]);
 
   const value = useMemo<Ctx>(() => ({
-    photoUrl, resultUrl, resultId, picks, status, statusText, error, demo, notes, saved, collapsed, setCollapsed, sheet, setSheet, live, setLive,
+    photoUrl, resultUrl, resultId, picks, status, statusText, error, demo, provider, notes, saved, collapsed, setCollapsed, sheet, setSheet, live, setLive,
     uploadPhoto, tryProduct, removePick, setShade, startOver, save, download, adoptCapture, hasPick: (id) => picks.some((p) => p.product.id === id),
-  }), [photoUrl, resultUrl, resultId, picks, status, statusText, error, demo, notes, saved, collapsed, sheet, live, uploadPhoto, tryProduct, removePick, setShade, startOver, save, download, adoptCapture]);
+  }), [photoUrl, resultUrl, resultId, picks, status, statusText, error, demo, provider, notes, saved, collapsed, sheet, live, uploadPhoto, tryProduct, removePick, setShade, startOver, save, download, adoptCapture]);
 
   return <C.Provider value={value}>{children}</C.Provider>;
 }
