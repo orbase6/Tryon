@@ -2,16 +2,16 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Noto+Sans+Tamil:wght@400;600;700&display=swap">
 <style>
-  /* Layout: one-screen app — 3D auditorium on the left, booking rail on the right; stacks on phones. Single dark "lights down" look by choice. */
+  /* Layout: one-screen app — 3D auditorium left, booking rail right; on phones the hall sits on top, the rail below, and the total + Continue bar stays pinned to the bottom. Single dark "lights down" look by choice. */
   :root {
     --bg: #07080d;
     --surface: #0f121b;
     --surface-2: #161a27;
-    --line: #242a3c;
+    --line: #262c3f;
     --fg: #eceef6;
-    --muted: #8a91a9;
+    --muted: #949bb3;
     --accent: #ffc53d;
     --accent-ink: #1d1402;
     --pick: #5ff6e8;
@@ -20,10 +20,12 @@
     --c-balcony: #9277ff;
     --c-prime: #35c86b;
     --c-classic: #3d82f2;
-    --danger: #ff6b6b;
-    --display: "Unbounded", "Arial Black", system-ui, sans-serif;
-    --body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --danger: #ff7a7a;
+    --glass: rgba(10, 12, 20, 0.78);
+    --display: "Unbounded", "Noto Sans Tamil", "Arial Black", system-ui, sans-serif;
+    --body: "Figtree", "Noto Sans Tamil", system-ui, -apple-system, "Segoe UI", sans-serif;
     --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    --tap: 44px;
     color-scheme: dark;
   }
   * { box-sizing: border-box; }
@@ -33,226 +35,276 @@
     background: var(--bg);
     color: var(--fg);
     font-family: var(--body);
-    font-size: 14px;
+    font-size: 15px;
     line-height: 1.45;
     padding-left: max(16px, env(safe-area-inset-left, 0px));
     padding-right: max(16px, env(safe-area-inset-right, 0px));
     padding-block: 12px;
     overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
   }
   button { font: inherit; color: inherit; cursor: pointer; }
-  button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--pick); outline-offset: 2px; }
+  button:focus-visible, label:focus-within { outline: 2px solid var(--pick); outline-offset: 2px; }
+  svg.i { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
   .app { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 12px; }
 
   /* Header */
-  .top { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-  .film { display: flex; align-items: center; gap: 14px; min-width: 0; }
-  .cert { font-family: var(--mono); font-size: 11px; border: 1px solid var(--line); border-radius: 4px; padding: 2px 6px; color: var(--muted); }
-  .film h1 { margin: 0; font-family: var(--display); font-weight: 700; font-size: 20px; letter-spacing: 0.08em; text-transform: uppercase; line-height: 1.1; }
-  .film h1 span { font-weight: 500; font-size: 12px; letter-spacing: 0.14em; color: var(--muted); margin-left: 8px; }
-  .meta { margin: 3px 0 0; color: var(--muted); font-size: 12.5px; }
-  .steps { display: flex; gap: 6px; list-style: none; margin: 0; padding: 0; font-size: 12px; color: var(--muted); }
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .film { min-width: 0; }
+  .film h1 { margin: 0; font-family: var(--display); font-weight: 700; font-size: 20px; letter-spacing: 0.08em; text-transform: uppercase; line-height: 1.15; }
+  .film h1 span { font-weight: 500; font-size: 12px; letter-spacing: 0.12em; color: var(--muted); margin-left: 8px; }
+  .meta { margin: 3px 0 0; color: var(--muted); font-size: 13px; }
+  .cert { font-family: var(--mono); font-size: 11px; border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; }
+  .top-right { display: flex; align-items: center; gap: 14px; flex: none; }
+  .steps { display: flex; gap: 6px; list-style: none; margin: 0; padding: 0; font-size: 12.5px; color: var(--muted); }
   .steps li { display: flex; align-items: center; gap: 6px; }
-  .steps li + li::before { content: ""; width: 18px; height: 1px; background: var(--line); }
+  .steps li + li::before { content: ""; width: 16px; height: 1px; background: var(--line); }
   .steps li[aria-current="step"] { color: var(--fg); font-weight: 600; }
-  .steps b { font-family: var(--mono); font-weight: 600; font-size: 11px; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--line); }
+  .steps b { font-family: var(--mono); font-size: 11px; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--line); }
   .steps li[aria-current="step"] b { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .lang { min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface-2); font-weight: 600; font-size: 13px; }
 
-  main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 12px; min-height: 0; }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 370px; gap: 12px; min-height: 0; }
 
   /* Stage */
   .stage { position: relative; min-height: 0; border-radius: 16px; overflow: hidden; background: #030407; border: 1px solid var(--line); }
-  .stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
-  .views { position: absolute; top: 12px; left: 12px; right: 12px; display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; pointer-events: none; }
-  .views-inner { display: flex; gap: 4px; padding: 4px; background: rgba(10, 12, 20, 0.72); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.08); border-radius: 999px; pointer-events: auto; }
-  .views button { border: 0; background: transparent; padding: 6px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 500; color: var(--muted); white-space: nowrap; }
+  .stage canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+  .stage.dragging-file::after { content: attr(data-drop); position: absolute; inset: 10px; border: 2px dashed var(--accent); border-radius: 12px; display: grid; place-items: center; background: rgba(0,0,0,0.6); color: var(--accent); font-weight: 600; font-size: 16px; text-align: center; padding: 20px; }
+
+  .views { position: absolute; top: 10px; left: 10px; right: 64px; overflow-x: auto; scrollbar-width: none; pointer-events: none; }
+  .views::-webkit-scrollbar { display: none; }
+  .views-inner { display: inline-flex; gap: 2px; padding: 4px; background: var(--glass); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.09); border-radius: 999px; pointer-events: auto; }
+  .views button { border: 0; background: transparent; min-height: 38px; padding: 0 13px; border-radius: 999px; font-size: 13px; font-weight: 600; color: var(--muted); white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+  .views button svg.i { width: 17px; height: 17px; }
   .views button:hover { color: var(--fg); }
   .views button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
   .views .tour { color: var(--accent); }
   .views .tour[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 
-  .hint { position: absolute; left: 14px; bottom: 12px; font-size: 12px; color: var(--muted); background: rgba(10,12,20,0.6); padding: 6px 10px; border-radius: 8px; pointer-events: none; }
-  .toggles { position: absolute; right: 12px; bottom: 12px; display: flex; gap: 6px; }
-  .toggles button { border: 1px solid rgba(255,255,255,0.12); background: rgba(10,12,20,0.72); backdrop-filter: blur(8px); padding: 6px 12px; border-radius: 999px; font-size: 12px; color: var(--muted); }
-  .toggles button[aria-pressed="true"] { color: var(--fg); border-color: rgba(255,255,255,0.35); }
-  .seatview-tag { position: absolute; top: 58px; left: 50%; transform: translateX(-50%); background: rgba(10,12,20,0.78); border: 1px solid var(--pick); color: var(--pick); font-family: var(--mono); font-size: 12px; padding: 5px 12px; border-radius: 999px; pointer-events: none; white-space: nowrap; }
+  .side-ctl { position: absolute; top: 10px; right: 10px; display: grid; gap: 6px; }
+  .round { width: var(--tap); height: var(--tap); border-radius: 50%; border: 1px solid rgba(255,255,255,0.12); background: var(--glass); backdrop-filter: blur(8px); display: grid; place-items: center; color: var(--fg); }
+  .round:hover { border-color: rgba(255,255,255,0.35); }
 
-  .tip { position: absolute; pointer-events: none; background: rgba(12, 14, 22, 0.92); border: 1px solid rgba(255,255,255,0.14); border-radius: 10px; padding: 7px 10px; font-size: 12px; transform: translate(-50%, calc(-100% - 14px)); white-space: nowrap; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
-  .tip b { font-family: var(--mono); font-weight: 600; display: block; font-size: 12.5px; }
+  .bottom-ctl { position: absolute; left: 10px; right: 10px; bottom: 10px; display: flex; justify-content: space-between; align-items: flex-end; gap: 8px; pointer-events: none; }
+  .bottom-ctl > div { display: flex; gap: 6px; pointer-events: auto; flex-wrap: wrap; }
+  .pill { min-height: var(--tap); padding: 0 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.12); background: var(--glass); backdrop-filter: blur(8px); display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; color: var(--muted); }
+  .pill:hover { color: var(--fg); }
+  .pill[aria-pressed="true"] { color: var(--fg); border-color: rgba(255,255,255,0.4); }
+  .pill.video { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .pill.video:hover { filter: brightness(1.06); }
+  .pill.icon-only { width: var(--tap); padding: 0; justify-content: center; }
+
+  .seatview-tag { position: absolute; top: 62px; left: 50%; transform: translateX(-50%); background: var(--glass); border: 1px solid var(--pick); color: var(--pick); font-family: var(--mono); font-size: 12.5px; padding: 6px 14px; border-radius: 999px; pointer-events: none; white-space: nowrap; }
+
+  .tip { position: absolute; pointer-events: none; background: rgba(12,14,22,0.94); border: 1px solid rgba(255,255,255,0.16); border-radius: 12px; padding: 8px 12px; font-size: 13px; transform: translate(-50%, calc(-100% - 16px)); white-space: nowrap; box-shadow: 0 8px 24px rgba(0,0,0,0.45); display: flex; gap: 10px; align-items: center; }
+  .tip .dot { width: 14px; height: 14px; border-radius: 4px; background: var(--cc, var(--booked)); flex: none; }
+  .tip b { font-family: var(--mono); font-weight: 600; display: block; font-size: 13px; }
   .tip span { color: var(--muted); }
   .tip.is-booked b { color: var(--danger); }
   .tip.is-picked b { color: var(--pick); }
 
-  .loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 13px; text-align: center; padding: 24px; }
+  .loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 14px; text-align: center; padding: 24px; }
 
   /* Panel */
   .panel { min-height: 0; overflow-y: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; display: flex; flex-direction: column; }
-  .panel section { padding: 16px 16px 4px; display: grid; gap: 10px; }
-  .eyebrow { margin: 0; font-family: var(--display); font-weight: 500; font-size: 10.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
+  .panel section { padding: 16px 16px 6px; display: grid; gap: 10px; }
+  .eyebrow { margin: 0; font-family: var(--display); font-weight: 500; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
   .class-list { display: grid; gap: 6px; }
-  .class-card { display: grid; grid-template-columns: 4px minmax(0, 1fr) auto; gap: 12px; align-items: center; text-align: left; padding: 10px 12px 10px 10px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface-2); transition: border-color 0.15s, background 0.15s; }
-  .class-card:hover { border-color: #39405a; }
-  .class-card[aria-pressed="true"] { border-color: var(--cc); background: color-mix(in srgb, var(--cc) 10%, var(--surface-2)); }
-  .class-card .bar { width: 4px; height: 32px; border-radius: 4px; background: var(--cc); }
-  .class-card strong { display: block; font-size: 14px; font-weight: 600; }
-  .class-card small { display: block; color: var(--muted); font-size: 12px; }
-  .class-card .price { text-align: right; font-family: var(--mono); }
-  .class-card .price strong { font-size: 14px; }
-  .class-card .price small { font-size: 11px; }
-  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); margin: 2px 0 0; padding: 0; list-style: none; }
+  .class-card { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 12px; align-items: center; text-align: left; min-height: 60px; padding: 8px 12px 8px 10px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface-2); transition: border-color 0.15s, background 0.15s; }
+  .class-card:hover { border-color: #3b425c; }
+  .class-card[aria-pressed="true"] { border-color: var(--cc); background: color-mix(in srgb, var(--cc) 12%, var(--surface-2)); box-shadow: inset 0 0 0 1px var(--cc); }
+  .class-card .seat-ic { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; background: color-mix(in srgb, var(--cc) 22%, transparent); color: var(--cc); }
+  .class-card .seat-ic svg { width: 22px; height: 22px; }
+  .class-card strong { display: block; font-size: 15px; font-weight: 600; }
+  .class-card small { display: block; color: var(--muted); font-size: 12.5px; }
+  .class-card .price { text-align: right; }
+  .class-card .price strong { font-family: var(--mono); font-size: 15px; }
+  .class-card .price small { font-size: 12px; white-space: nowrap; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 13px; color: var(--muted); margin: 2px 0 0; padding: 0; list-style: none; }
   .legend li { display: flex; align-items: center; gap: 6px; }
-  .legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .legend svg.i { width: 18px; height: 18px; }
 
   .quick { display: flex; gap: 8px; align-items: center; }
-  .stepper { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-2); }
-  .stepper button { width: 34px; height: 34px; border: 0; background: transparent; font-size: 18px; color: var(--muted); border-radius: 50%; }
-  .stepper button:hover { color: var(--fg); }
-  .stepper output { width: 22px; text-align: center; font-family: var(--mono); font-weight: 600; }
-  .best { flex: 1; height: 36px; border-radius: 999px; border: 0; background: var(--fg); color: var(--bg); font-weight: 600; }
-  .best:hover { background: #ffffff; }
-  .small { font-size: 12px; color: var(--muted); margin: 0; }
+  .stepper { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-2); flex: none; }
+  .stepper button { width: var(--tap); height: var(--tap); border: 0; background: transparent; color: var(--fg); border-radius: 50%; display: grid; place-items: center; }
+  .stepper output { min-width: 24px; text-align: center; font-family: var(--mono); font-weight: 600; font-size: 16px; }
+  .best { flex: 1; min-height: var(--tap); border-radius: 999px; border: 0; background: var(--fg); color: var(--bg); font-weight: 700; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 12px; }
+  .best:hover { background: #fff; }
+  .small { font-size: 12.5px; color: var(--muted); margin: 0; }
 
   .row-head { display: flex; justify-content: space-between; align-items: center; }
-  .link { border: 0; background: none; color: var(--muted); font-size: 12px; text-decoration: underline; text-underline-offset: 3px; padding: 2px 0; }
+  .link { border: 0; background: none; color: var(--muted); font-size: 13px; min-height: 32px; padding: 0 4px; display: inline-flex; align-items: center; gap: 4px; }
   .link:hover { color: var(--fg); }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-  .chip { display: inline-flex; align-items: center; border-radius: 999px; background: color-mix(in srgb, var(--cc) 16%, var(--surface-2)); border: 1px solid color-mix(in srgb, var(--cc) 55%, transparent); font-family: var(--mono); font-size: 12px; }
-  .chip button { border: 0; background: none; padding: 5px 4px 5px 10px; display: inline-flex; align-items: center; gap: 6px; }
-  .chip button i { width: 7px; height: 7px; border-radius: 50%; background: var(--cc); }
-  .chip .x { padding: 5px 10px 5px 4px; color: var(--muted); font-size: 14px; line-height: 1; }
-  .chip .x:hover { color: var(--fg); }
-  .empty { margin: 0; color: var(--muted); font-size: 12.5px; border: 1px dashed var(--line); border-radius: 12px; padding: 12px; }
+  .chip { display: inline-flex; align-items: center; border-radius: 999px; background: color-mix(in srgb, var(--cc) 16%, var(--surface-2)); border: 1px solid color-mix(in srgb, var(--cc) 55%, transparent); font-family: var(--mono); font-size: 13px; min-height: 40px; }
+  .chip button { border: 0; background: none; min-height: 40px; padding: 0 4px 0 12px; display: inline-flex; align-items: center; gap: 6px; }
+  .chip button svg.i { width: 15px; height: 15px; color: var(--cc); }
+  .chip .x { padding: 0 12px 0 6px; color: var(--muted); }
+  .chip .x svg.i { color: var(--muted); }
+  .chip .x:hover svg.i { color: var(--fg); }
+  .empty { margin: 0; color: var(--muted); font-size: 13px; border: 1px dashed var(--line); border-radius: 12px; padding: 12px; display: flex; gap: 10px; align-items: center; }
 
-  .checkout { margin-top: auto; position: sticky; bottom: 0; padding: 14px 16px 16px; background: linear-gradient(to top, var(--surface) 75%, transparent); display: grid; grid-template-columns: 1fr auto; gap: 10px 12px; align-items: end; }
-  .checkout .lines { font-size: 12px; color: var(--muted); }
-  .checkout .lines b { color: var(--fg); font-weight: 600; }
+  .checkout { margin-top: auto; position: sticky; bottom: 0; padding: 14px 16px 16px; background: linear-gradient(to top, var(--surface) 78%, transparent); display: grid; grid-template-columns: 1fr auto; gap: 10px 12px; align-items: end; }
+  .checkout .lines { font-size: 13px; color: var(--muted); }
+  .checkout .lines b { color: var(--fg); font-weight: 600; font-size: 14px; }
   .total { font-family: var(--display); font-weight: 700; font-size: 26px; font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
-  .cta { grid-column: 1 / -1; height: 48px; border: 0; border-radius: 12px; background: var(--accent); color: var(--accent-ink); font-family: var(--display); font-weight: 500; font-size: 12.5px; letter-spacing: 0.14em; text-transform: uppercase; }
+  .cta { grid-column: 1 / -1; min-height: 52px; border: 0; border-radius: 14px; background: var(--accent); color: var(--accent-ink); font-family: var(--display); font-weight: 500; font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; display: inline-flex; align-items: center; justify-content: center; gap: 10px; padding: 0 16px; }
   .cta:hover { filter: brightness(1.06); }
   .cta:disabled { background: var(--surface-2); color: var(--muted); cursor: not-allowed; filter: none; }
 
   /* Toast */
-  .toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-size: 13px; font-weight: 500; box-shadow: 0 10px 30px rgba(0,0,0,0.5); z-index: 40; max-width: calc(100% - 32px); text-align: center; }
+  .toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 12px 18px; border-radius: 12px; font-size: 14px; font-weight: 600; box-shadow: 0 10px 30px rgba(0,0,0,0.5); z-index: 40; width: max-content; max-width: calc(100% - 32px); text-align: center; }
 
-  /* Modal */
-  .modal { position: fixed; inset: 0; background: rgba(3, 4, 8, 0.72); backdrop-filter: blur(6px); display: grid; place-items: center; z-index: 30; padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+  /* Modal + help */
+  .modal { position: fixed; inset: 0; background: rgba(3,4,8,0.74); backdrop-filter: blur(6px); display: grid; place-items: center; z-index: 30; padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
   .sheet { width: min(480px, 100%); max-height: 100%; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 20px; display: grid; gap: 16px; }
-  .sheet h2 { margin: 0; font-family: var(--display); font-weight: 700; font-size: 18px; letter-spacing: 0.04em; text-wrap: balance; }
-  .sheet .sub { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+  .sheet h2 { margin: 0; font-family: var(--display); font-weight: 700; font-size: 18px; letter-spacing: 0.03em; text-wrap: balance; }
+  .sheet .sub { margin: 4px 0 0; color: var(--muted); font-size: 13.5px; }
+  .help-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .help-card { display: grid; justify-items: center; text-align: center; gap: 8px; padding: 14px 10px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--line); font-size: 14px; font-weight: 600; }
+  .help-card .big { width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center; background: color-mix(in srgb, var(--hc) 18%, transparent); color: var(--hc); }
+  .help-card .big svg.i { width: 30px; height: 30px; }
+  .help-card.wide { grid-column: 1 / -1; }
   .snacks { display: grid; gap: 8px; }
-  .snack { display: grid; grid-template-columns: 40px minmax(0,1fr) auto; gap: 12px; align-items: center; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
-  .snack .art { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; font-family: var(--display); font-size: 11px; font-weight: 700; color: var(--accent-ink); }
-  .snack strong { display: block; font-size: 14px; font-weight: 600; }
-  .snack small { color: var(--muted); font-size: 12px; font-family: var(--mono); }
-  .lines-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  .lines-table td { padding: 7px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .snack { display: grid; grid-template-columns: 44px minmax(0,1fr) auto; gap: 12px; align-items: center; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+  .snack .art { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; font-family: var(--display); font-size: 11px; font-weight: 700; color: var(--accent-ink); }
+  .snack strong { display: block; font-size: 14.5px; font-weight: 600; }
+  .snack small { color: var(--muted); font-size: 12.5px; font-family: var(--mono); }
+  .lines-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .lines-table td { padding: 8px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
   .lines-table td:last-child { text-align: right; font-family: var(--mono); white-space: nowrap; padding-left: 12px; }
-  .lines-table tr.total-row td { border-bottom: 0; font-weight: 700; font-size: 15px; padding-top: 12px; }
-  .lines-table .muted { color: var(--muted); font-size: 12px; display: block; font-family: var(--mono); }
+  .lines-table tr.total-row td { border-bottom: 0; font-weight: 700; font-size: 16px; padding-top: 12px; }
+  .lines-table .muted { color: var(--muted); font-size: 12.5px; display: block; font-family: var(--mono); }
   .sheet-actions { display: flex; gap: 8px; }
   .sheet-actions .cta { flex: 1; }
-  .ghost { height: 48px; padding: 0 18px; border-radius: 12px; border: 1px solid var(--line); background: transparent; color: var(--fg); font-weight: 600; }
-  .ghost:hover { border-color: #3a4058; }
-  .demo-note { margin: 0; font-size: 12px; color: var(--muted); text-align: center; }
+  .ghost { min-height: 52px; padding: 0 18px; border-radius: 14px; border: 1px solid var(--line); background: transparent; color: var(--fg); font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+  .ghost:hover { border-color: #3d4560; }
+  .demo-note { margin: 0; font-size: 12.5px; color: var(--muted); text-align: center; }
 
   .ticket { border-radius: 16px; overflow: hidden; background: var(--fg); color: #10121a; }
   .ticket-top { padding: 18px; display: grid; gap: 4px; background: linear-gradient(135deg, #2a1640, #6b2a1c 60%, #c86a2a); color: #fff; }
   .ticket-top .t-title { font-family: var(--display); font-weight: 700; letter-spacing: 0.1em; font-size: 20px; }
-  .ticket-top small { opacity: 0.85; font-size: 12px; }
+  .ticket-top small { opacity: 0.88; font-size: 12.5px; }
   .ticket-body { padding: 16px 18px; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 14px; align-items: center; border-top: 2px dashed #c9ccd8; }
-  .ticket-body dl { margin: 0; display: grid; grid-template-columns: auto minmax(0,1fr); gap: 4px 12px; font-size: 12.5px; }
-  .ticket-body dt { color: #6b7086; }
+  .ticket-body dl { margin: 0; display: grid; grid-template-columns: auto minmax(0,1fr); gap: 4px 12px; font-size: 13px; }
+  .ticket-body dt { color: #5d6278; }
   .ticket-body dd { margin: 0; font-family: var(--mono); font-weight: 600; overflow-wrap: anywhere; }
   .ticket canvas { width: 92px; height: 92px; image-rendering: pixelated; }
 
   @media (max-width: 900px) {
     html, body { height: auto; }
-    body { overflow: auto; }
+    body { overflow: auto; padding-bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
     .app { height: auto; }
     main { grid-template-columns: minmax(0, 1fr); }
-    .stage { height: 62svh; min-height: 360px; }
+    .stage { height: 60svh; min-height: 380px; max-height: 640px; }
     .panel { overflow: visible; }
     .steps { display: none; }
+    .checkout {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; margin: 0;
+      background: var(--surface); border-top: 1px solid var(--line); box-shadow: 0 -10px 30px rgba(0,0,0,0.45);
+      padding: 12px max(16px, env(safe-area-inset-right, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+    }
+    .toast { bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
   }
-  @media (max-width: 560px) {
-    .hint { display: none; }
+  @media (max-width: 600px) {
+    body { font-size: 15px; }
     .film h1 { font-size: 17px; }
     .film h1 span { display: block; margin: 2px 0 0; }
+    .meta { font-size: 12.5px; }
+    .pill .lbl-sm { display: none; }
+    .pill.icon-sm { width: var(--tap); padding: 0; justify-content: center; }
+    .views button .lbl { font-size: 12.5px; }
   }
-  @media (prefers-reduced-motion: reduce) {
-    * { transition: none !important; }
-  }
+  :root[lang="ta"] .eyebrow, :root[lang="ta"] .cta, :root[lang="ta"] .film h1 span { letter-spacing: 0; text-transform: none; }
+  :root[lang="ta"] .eyebrow { font-family: var(--body); font-size: 12.5px; font-weight: 600; }
+  :root[lang="ta"] .cta { font-family: var(--body); font-size: 15px; font-weight: 700; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 
 <div class="app">
   <header class="top">
     <div class="film">
-      <div>
-        <h1>Kaalam <span>The Last Monsoon</span></h1>
-        <p class="meta">Lumen Talkies, Anna Nagar · Sat 31 Oct · 10:40 PM · Dolby Atmos · Tamil · <span class="cert">U/A 13+</span></p>
-      </div>
+      <h1>Kaalam <span data-t="title_sub">The Last Monsoon</span></h1>
+      <p class="meta"><span data-t="meta">Lumen Talkies, Anna Nagar · Sat 31 Oct · 10:40 PM · Dolby Atmos · Tamil</span> · <span class="cert">U/A 13+</span></p>
     </div>
-    <ol class="steps" aria-label="Booking steps">
-      <li aria-current="step" id="step1"><b>1</b>Seats</li>
-      <li id="step2"><b>2</b>Snacks</li>
-      <li id="step3"><b>3</b>Confirm</li>
-    </ol>
+    <div class="top-right">
+      <ol class="steps" aria-label="Booking steps">
+        <li aria-current="step" id="step1"><b>1</b><span data-t="step_seats">Seats</span></li>
+        <li id="step2"><b>2</b><span data-t="step_snacks">Snacks</span></li>
+        <li id="step3"><b>3</b><span data-t="step_confirm">Confirm</span></li>
+      </ol>
+      <button type="button" class="lang" id="langBtn" lang="ta">தமிழ்</button>
+    </div>
   </header>
 
   <main>
-    <div class="stage" id="stage">
+    <div class="stage" id="stage" data-drop="Drop a video to play it on the screen">
       <div class="loading" id="loading">Setting up the auditorium…</div>
       <div class="views"><div class="views-inner" role="group" aria-label="Camera views">
-        <button type="button" data-view="overview" aria-pressed="true">Overview</button>
-        <button type="button" data-view="stage" aria-pressed="false">From stage</button>
-        <button type="button" data-view="balcony" aria-pressed="false">Balcony</button>
-        <button type="button" data-view="bird" aria-pressed="false">Bird's eye</button>
-        <button type="button" class="tour" id="tourBtn" aria-pressed="false">▶ Tour</button>
+        <button type="button" data-view="overview" aria-pressed="true" data-icon="cube"><span class="lbl" data-t="v_overview">Overview</span></button>
+        <button type="button" data-view="stage" aria-pressed="false" data-icon="screen"><span class="lbl" data-t="v_stage">Near screen</span></button>
+        <button type="button" data-view="balcony" aria-pressed="false" data-icon="stairs"><span class="lbl" data-t="v_balcony">Balcony</span></button>
+        <button type="button" data-view="bird" aria-pressed="false" data-icon="grid"><span class="lbl" data-t="v_bird">Top view</span></button>
+        <button type="button" class="tour" id="tourBtn" aria-pressed="false"><span id="tourIc"></span><span class="lbl" id="tourLbl" data-t="v_tour">Tour</span></button>
       </div></div>
+      <div class="side-ctl">
+        <button type="button" class="round" id="helpBtn" data-icon="help" data-ta="help" aria-label="Help"></button>
+        <button type="button" class="round" id="zoomIn" data-icon="plus" data-ta="zoom_in" aria-label="Zoom in"></button>
+        <button type="button" class="round" id="zoomOut" data-icon="minus" data-ta="zoom_out" aria-label="Zoom out"></button>
+        <button type="button" class="round" id="resetBtn" data-icon="home" data-ta="reset" aria-label="Reset view"></button>
+      </div>
       <div class="seatview-tag" id="seatTag" hidden></div>
       <div class="tip" id="tip" hidden></div>
-      <div class="hint">Drag to orbit · scroll to zoom · double-click a seat for its view · up to 10 seats at a time</div>
-      <div class="toggles">
-        <button type="button" id="lightsBtn" aria-pressed="true">House lights</button>
-        <button type="button" id="hdBtn" aria-pressed="true">HD</button>
+      <div class="bottom-ctl">
+        <div>
+          <label class="pill video icon-sm" id="videoBtn" data-icon="film"><span class="lbl-sm" data-t="my_video">Play my video</span><input type="file" id="videoInput" accept="video/*" hidden></label>
+          <button type="button" class="pill icon-only" id="vidPlay" hidden data-ta="pause" aria-label="Pause"></button>
+          <button type="button" class="pill icon-only" id="vidMute" hidden data-ta="sound" aria-label="Sound"></button>
+          <button type="button" class="pill icon-only" id="vidRemove" hidden data-icon="x" data-ta="remove_video" aria-label="Remove video"></button>
+        </div>
+        <div>
+          <button type="button" class="pill icon-sm" id="lightsBtn" aria-pressed="true" data-icon="bulb"><span class="lbl-sm" data-t="lights">Lights</span></button>
+          <button type="button" class="pill icon-sm" id="hdBtn" aria-pressed="true"><span style="font-family: var(--mono); font-size: 12px; font-weight: 600">HD</span></button>
+        </div>
       </div>
     </div>
 
     <aside class="panel" aria-label="Booking">
       <section>
-        <h2 class="eyebrow">Seat classes</h2>
+        <h2 class="eyebrow" data-t="classes">Seat classes</h2>
         <div class="class-list" id="classList"></div>
         <ul class="legend">
-          <li><i style="background: var(--booked)"></i>Booked</li>
-          <li><i style="background: var(--pick)"></i>Your pick</li>
-          <li><i style="background: var(--c-royal)"></i>Recliners sold in pairs</li>
+          <li style="color: var(--c-prime)"><span data-icon="seat"></span><span style="color: var(--muted)" data-t="leg_free">Free</span></li>
+          <li style="color: var(--booked)"><span data-icon="seat"></span><span style="color: var(--muted)" data-t="leg_booked">Booked</span></li>
+          <li style="color: var(--pick)"><span data-icon="seat"></span><span style="color: var(--muted)" data-t="leg_pick">Your pick</span></li>
+          <li style="color: var(--c-royal)"><span data-icon="pair"></span><span style="color: var(--muted)" data-t="leg_pair">Recliners come in pairs</span></li>
         </ul>
       </section>
       <section>
-        <h2 class="eyebrow">Quick pick</h2>
+        <h2 class="eyebrow" data-t="quick">Quick pick</h2>
         <div class="quick">
           <div class="stepper">
-            <button type="button" id="qMinus" aria-label="Fewer seats">−</button>
+            <button type="button" id="qMinus" data-icon="minus" data-ta="fewer" aria-label="Fewer seats"></button>
             <output id="qCount" aria-live="polite">2</output>
-            <button type="button" id="qPlus" aria-label="More seats">+</button>
+            <button type="button" id="qPlus" data-icon="plus" data-ta="more" aria-label="More seats"></button>
           </div>
-          <button type="button" class="best" id="bestBtn">Best 2 seats</button>
+          <button type="button" class="best" id="bestBtn" data-icon="star"><span id="bestLbl">2 best seats</span></button>
         </div>
         <p class="small" id="quickHint"></p>
       </section>
       <section>
         <div class="row-head">
-          <h2 class="eyebrow">Your seats</h2>
-          <button type="button" class="link" id="clearBtn">Clear</button>
+          <h2 class="eyebrow" data-t="yours">Your seats</h2>
+          <button type="button" class="link" id="clearBtn" data-icon="x"><span data-t="clear">Clear</span></button>
         </div>
         <div class="chips" id="chips"></div>
-        <p class="empty" id="emptySeats" hidden>Tap a seat in the hall, or use Quick pick to grab the best block together.</p>
+        <p class="empty" id="emptySeats" hidden><span data-icon="tap"></span><span data-t="empty">Tap a seat in the hall, or press the best-seats button.</span></p>
       </section>
       <div class="checkout">
         <div class="lines"><b id="ticketLine">0 tickets</b><br><span id="feeLine">+ fees ₹0</span></div>
         <div class="total" id="total">₹0</div>
-        <button type="button" class="cta" id="continueBtn">Continue · Add snacks</button>
+        <button type="button" class="cta" id="continueBtn"><span data-t="continue">Continue · Add snacks</span><span data-icon="arrow"></span></button>
       </div>
     </aside>
   </main>
@@ -260,6 +312,111 @@
 
 <div class="toast" id="toast" role="status" hidden></div>
 <div class="modal" id="modal" hidden><div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle"></div></div>
+
+<script>
+/* Icons + language: plain script so labels and icons are ready before the 3D scene loads */
+window.ICONS = {
+  cube: '<path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7M12 11v10"/>',
+  screen: '<rect x="3" y="4" width="18" height="11" rx="1.5"/><path d="M8 20h8M12 15v5"/>',
+  stairs: '<path d="M3 20h5v-5h5v-5h5V5h3"/>',
+  grid: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M4 15h16M10 4v16"/>',
+  play: '<path d="M7 4.5l12 7.5-12 7.5z" fill="currentColor"/>',
+  stop: '<rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor"/>',
+  pause: '<path d="M8 5v14M16 5v14"/>',
+  bulb: '<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.7.7 1 1.5 1 2.5h6c0-1 .3-1.8 1-2.5A6 6 0 0 0 12 3z"/>',
+  film: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18M3 15h18M8 5v4M16 5v4M8 15v4M16 15v4"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  minus: '<path d="M5 12h14"/>',
+  home: '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/>',
+  help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.7M12 17h.01"/>',
+  sound: '<path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/>',
+  mute: '<path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M17 9l5 6M22 9l-5 6"/>',
+  x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  seat: '<path d="M7 3h10a1 1 0 0 1 1 1v8H6V4a1 1 0 0 1 1-1z"/><path d="M4 10v6h16v-6M6 16v4M18 16v4"/>',
+  pair: '<path d="M3 5h7v7H3zM14 5h7v7h-7z"/><path d="M2 10v5h20v-5M4 15v4M20 15v4"/>',
+  star: '<path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/>',
+  tap: '<path d="M9 11V5a2 2 0 1 1 4 0v5l4.5 1a2 2 0 0 1 1.5 2.3L18 19a2 2 0 0 1-2 1.7h-5a2 2 0 0 1-1.6-.8L6 15.5a1.6 1.6 0 0 1 2.4-2L9 14"/>',
+  dbl: '<circle cx="12" cy="12" r="3" fill="currentColor"/><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="10.5" opacity=".5"/>',
+  drag: '<path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/>',
+  zoom: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-5-5M11 8v6M8 11h6"/>',
+  arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+  back: '<path d="M19 12H5M11 6l-6 6 6 6"/>',
+};
+window.icon = (n) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n] || ''}</svg>`;
+document.querySelectorAll('[data-icon]').forEach((el) => el.insertAdjacentHTML('afterbegin', icon(el.dataset.icon)));
+
+window.STR = {
+  en: {
+    title_sub: 'The Last Monsoon', meta: 'Lumen Talkies, Anna Nagar · Sat 31 Oct · 10:40 PM · Dolby Atmos · Tamil',
+    step_seats: 'Seats', step_snacks: 'Snacks', step_confirm: 'Confirm',
+    v_overview: 'Overview', v_stage: 'Near screen', v_balcony: 'Balcony', v_bird: 'Top view', v_tour: 'Tour', v_stop: 'Stop',
+    lights: 'Lights', my_video: 'Play my video', change_video: 'Change video', pause: 'Pause', play: 'Play', sound: 'Sound on/off', remove_video: 'Remove video',
+    help: 'Help', zoom_in: 'Zoom in', zoom_out: 'Zoom out', reset: 'Reset view', fewer: 'Fewer seats', more: 'More seats',
+    classes: 'Seat classes', quick: 'Quick pick', best: '{n} best seats', best1: '1 best seat', yours: 'Your seats', clear: 'Clear',
+    empty: 'Tap a seat in the hall, or press the best-seats button.',
+    leg_free: 'Free', leg_booked: 'Booked', leg_pick: 'Your pick', leg_pair: 'Recliners come in pairs',
+    tickets: '{n} tickets', ticket1: '1 ticket', fees: '+ fees {v}', continue: 'Continue · Add snacks', left: '{n} left',
+    c_royal: 'Royal Recliner', d_royal: 'Recliners · food served at seat', c_balcony: 'Balcony', d_balcony: 'High, centred view',
+    c_prime: 'Prime', d_prime: 'Best sound & picture', c_classic: 'Classic', d_classic: 'Front rows · big screen',
+    quick_all: 'Finds {n} seats side by side, starting with Prime.', quick_cls: 'Finds {n} seats side by side in {c}.',
+    row_seat: 'Row {r} · Seat {n}', tip_booked: 'Already booked', tip_pick: 'Your seat · tap again to remove', pair_price: '{v} per pair',
+    t_booked: 'Seat {id} is already booked.', t_max: 'You can book up to {n} seats at a time.', t_pair: 'Recliners come in pairs, so {a} was added too.',
+    t_pairbooked: 'The other recliner in this pair is booked.', t_picked: 'Picked {a} to {b} in {c}.', t_round: ' Recliners come in pairs, so we rounded up.',
+    t_none: 'No {n} seats side by side here. Try fewer seats.', t_video: 'Your video is playing on the screen.', t_muted: 'Video is muted. Tap the speaker button for sound.',
+    t_notvideo: 'That file is not a video. Choose an MP4, WebM or MOV file.', t_videofail: 'This video can’t play here. Try an MP4 file.', t_moved: 'Moved there. Tap the house button to go back.',
+    seat_view: 'View from {id}', drop: 'Drop a video to play it on the screen', loading: 'Setting up the auditorium…',
+    help_title: 'How to use', help_tap: 'Tap a seat to choose it', help_dbl: 'Double-tap anywhere to go there', help_drag: 'Drag to look around',
+    help_zoom: 'Pinch, scroll or use + − to zoom', help_video: 'Play your own video on the big screen', got_it: 'Got it',
+    snacks_title: 'Add snacks', snacks_sub: 'Ready at the counter. Recliner seats get it served at the seat.', back: 'Back', review: 'Review · {v}',
+    review_title: 'Check your booking', fee_line: 'Convenience fee ({v} per ticket)', total: 'Total', confirm: 'Confirm booking',
+    demo: 'Demo checkout. No payment is taken.', booked_title: 'You’re booked', booked_sub: 'Show this at the entry. Your seats now show as booked.',
+    b_booking: 'Booking', b_seats: 'Seats', b_snacks: 'Snacks', b_paid: 'Paid', none: 'None', done: 'Done',
+    s_pop: 'Salted popcorn', s_car: 'Caramel popcorn', s_nac: 'Nachos with cheese', s_cof: 'Cold coffee', s_cmb: 'Combo: 2 popcorn + 2 drinks',
+    screen_info: 'Kaalam · Sat 31 Oct · 10:40 PM · Lumen Talkies, Screen 2',
+  },
+  ta: {
+    title_sub: 'கடைசி மழைக்காலம்', meta: 'லுமென் டாக்கீஸ், அண்ணா நகர் · சனி 31 அக் · இரவு 10:40 · டால்பி அட்மாஸ் · தமிழ்',
+    step_seats: 'இருக்கை', step_snacks: 'சிற்றுண்டி', step_confirm: 'உறுதி',
+    v_overview: 'முழு பார்வை', v_stage: 'திரை அருகே', v_balcony: 'பால்கனி', v_bird: 'மேல் பார்வை', v_tour: 'சுற்றிப் பார்', v_stop: 'நிறுத்து',
+    lights: 'விளக்கு', my_video: 'என் வீடியோ', change_video: 'வீடியோ மாற்று', pause: 'நிறுத்து', play: 'ஓட்டு', sound: 'ஒலி', remove_video: 'வீடியோ நீக்கு',
+    help: 'உதவி', zoom_in: 'பெரிதாக்கு', zoom_out: 'சிறிதாக்கு', reset: 'தொடக்கப் பார்வை', fewer: 'குறைவு', more: 'அதிகம்',
+    classes: 'இருக்கை வகைகள்', quick: 'விரைவுத் தேர்வு', best: 'சிறந்த {n} இருக்கை', best1: 'சிறந்த 1 இருக்கை', yours: 'உங்கள் இருக்கைகள்', clear: 'அழி',
+    empty: 'அரங்கில் ஒரு இருக்கையைத் தொடுங்கள், அல்லது "சிறந்த இருக்கை" பொத்தானை அழுத்துங்கள்.',
+    leg_free: 'காலி', leg_booked: 'பதிவானது', leg_pick: 'உங்கள் தேர்வு', leg_pair: 'ரெக்லைனர் ஜோடியாக மட்டும்',
+    tickets: '{n} டிக்கெட்', ticket1: '1 டிக்கெட்', fees: '+ கட்டணம் {v}', continue: 'தொடர் · சிற்றுண்டி', left: '{n} மீதம்',
+    c_royal: 'ராயல் ரெக்லைனர்', d_royal: 'சாய்வு இருக்கை · உணவு இருக்கைக்கே', c_balcony: 'பால்கனி', d_balcony: 'உயரத்திலிருந்து நடுப் பார்வை',
+    c_prime: 'பிரைம்', d_prime: 'சிறந்த ஒலி, சிறந்த படம்', c_classic: 'கிளாசிக்', d_classic: 'முன் வரிசைகள் · பெரிய திரை',
+    quick_all: '{n} இருக்கைகளை அருகருகே தேடும், பிரைமில் தொடங்கி.', quick_cls: '{c} வகையில் {n} இருக்கைகளை அருகருகே தேடும்.',
+    row_seat: 'வரிசை {r} · இருக்கை {n}', tip_booked: 'ஏற்கனவே பதிவானது', tip_pick: 'உங்கள் இருக்கை · நீக்க மீண்டும் தொடுங்கள்', pair_price: 'ஜோடிக்கு {v}',
+    t_booked: 'இருக்கை {id} ஏற்கனவே பதிவாகிவிட்டது.', t_max: 'ஒரே நேரத்தில் {n} இருக்கைகள் வரை மட்டுமே.', t_pair: 'ரெக்லைனர் ஜோடியாக வரும், அதனால் {a} சேர்க்கப்பட்டது.',
+    t_pairbooked: 'இந்த ஜோடியின் மற்ற இருக்கை பதிவாகிவிட்டது.', t_picked: '{c}: {a} முதல் {b} வரை தேர்வானது.', t_round: ' ரெக்லைனர் ஜோடியாக வருவதால் எண்ணிக்கை கூட்டப்பட்டது.',
+    t_none: 'இங்கே {n} இருக்கைகள் அருகருகே இல்லை. குறைவாக முயற்சிக்கவும்.', t_video: 'உங்கள் வீடியோ திரையில் ஓடுகிறது.', t_muted: 'ஒலி அணைந்துள்ளது. ஸ்பீக்கர் பொத்தானைத் தொடுங்கள்.',
+    t_notvideo: 'இது வீடியோ கோப்பு அல்ல. MP4, WebM அல்லது MOV தேர்வு செய்யுங்கள்.', t_videofail: 'இந்த வீடியோ இங்கே ஓடாது. MP4 முயற்சிக்கவும்.', t_moved: 'அங்கே வந்துவிட்டோம். திரும்ப வீடு பொத்தானைத் தொடுங்கள்.',
+    seat_view: '{id} இருக்கையிலிருந்து பார்வை', drop: 'திரையில் ஓட்ட வீடியோவை இங்கே விடுங்கள்', loading: 'அரங்கம் தயாராகிறது…',
+    help_title: 'எப்படி பயன்படுத்துவது', help_tap: 'இருக்கையைத் தொட்டால் தேர்வாகும்', help_dbl: 'எங்கே இருமுறை தொட்டாலும் அங்கே போகும்', help_drag: 'இழுத்து சுற்றிப் பாருங்கள்',
+    help_zoom: 'இரு விரல் அல்லது + − மூலம் பெரிதாக்குங்கள்', help_video: 'உங்கள் வீடியோவை பெரிய திரையில் ஓட்டுங்கள்', got_it: 'சரி',
+    snacks_title: 'சிற்றுண்டி சேர்க்கவும்', snacks_sub: 'கவுண்டரில் தயாராக இருக்கும். ரெக்லைனருக்கு இருக்கைக்கே வரும்.', back: 'பின்செல்', review: 'சரிபார் · {v}',
+    review_title: 'உங்கள் பதிவைச் சரிபாருங்கள்', fee_line: 'சேவைக் கட்டணம் (டிக்கெட்டுக்கு {v})', total: 'மொத்தம்', confirm: 'பதிவை உறுதி செய்',
+    demo: 'இது டெமோ. பணம் எடுக்கப்படாது.', booked_title: 'பதிவு முடிந்தது', booked_sub: 'நுழைவில் இதைக் காட்டுங்கள். உங்கள் இருக்கைகள் இப்போது பதிவானவை.',
+    b_booking: 'பதிவு எண்', b_seats: 'இருக்கைகள்', b_snacks: 'சிற்றுண்டி', b_paid: 'செலுத்தியது', none: 'இல்லை', done: 'முடிந்தது',
+    s_pop: 'உப்பு பாப்கார்ன்', s_car: 'கேரமல் பாப்கார்ன்', s_nac: 'சீஸ் நாச்சோஸ்', s_cof: 'குளிர் காபி', s_cmb: 'காம்போ: 2 பாப்கார்ன் + 2 பானம்',
+    screen_info: 'காலம் · சனி 31 அக் · இரவு 10:40 · லுமென் டாக்கீஸ், திரை 2',
+  },
+};
+window.lang = 'en';
+try { if (localStorage.getItem('lumen-lang') === 'ta') window.lang = 'ta'; } catch (e) {}
+window.t = (k, v = {}) => String(STR[lang][k] ?? STR.en[k] ?? k).replace(/\{(\w+)\}/g, (_, x) => v[x]);
+window.applyStatic = () => {
+  document.documentElement.lang = lang === 'ta' ? 'ta' : 'en';
+  document.querySelectorAll('[data-t]').forEach((el) => { el.textContent = t(el.dataset.t); });
+  document.querySelectorAll('[data-ta]').forEach((el) => { el.setAttribute('aria-label', t(el.dataset.ta)); el.title = t(el.dataset.ta); });
+  const lb = document.getElementById('langBtn');
+  lb.textContent = lang === 'ta' ? 'English' : 'தமிழ்'; lb.lang = lang === 'ta' ? 'en' : 'ta';
+  document.getElementById('stage').dataset.drop = t('drop');
+  const ld = document.getElementById('loading'); if (ld) ld.textContent = t('loading');
+};
+applyStatic();
+</script>
 
 <script type="importmap">
 { "imports": {
@@ -274,30 +431,35 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
 
+const { t, icon } = window;
 const $ = (s) => document.querySelector(s);
 const inr = (v) => '₹' + Math.round(v).toLocaleString('en-IN');
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const clamp = THREE.MathUtils.clamp;
 
 /* ---------------- Data ---------------- */
 const CLASSES = {
-  royal:   { name: 'Royal Recliner', desc: 'Motorised recliners · food to seat', price: 550, color: '#d9a441' },
-  balcony: { name: 'Balcony', desc: 'Elevated view · centre aligned', price: 320, color: '#9277ff' },
-  prime:   { name: 'Prime', desc: 'Sweet spot for sound & picture', price: 240, color: '#35c86b' },
-  classic: { name: 'Classic', desc: 'Front rows · big-screen energy', price: 160, color: '#3d82f2' },
+  royal:   { price: 550, color: '#d9a441' },
+  balcony: { price: 320, color: '#9277ff' },
+  prime:   { price: 240, color: '#35c86b' },
+  classic: { price: 160, color: '#3d82f2' },
 };
+const cname = (k) => t('c_' + k);
 const CLASS_ORDER = ['royal', 'balcony', 'prime', 'classic'];
 const BEST_FALLBACK = ['prime', 'balcony', 'royal', 'classic'];
 const MAX_SEATS = 10, FEE = 17.6;
 const CZ = -34;              // centre of the row arcs (behind the screen)
 const W = 13.45;             // half room width
+const H = 14;                // ceiling height
 const SCREEN_Z = -15.1, SCREEN_Y = 6.2;
+const SCREEN_W = 20, SCREEN_H = 8.5;
 const BALCONY_FRONT_R = 8.4 - CZ;
-const BACK_WALL_Z = 15.5;
+const BACK_WALL_Z = 15.5, FRONT_WALL_Z = -16;
 
 const ROW_SPECS = [];
 'ABCDEFGHIJK'.split('').forEach((L, i) => ROW_SPECS.push({
   letter: L, cls: i < 3 ? 'classic' : 'prime', z: -8.2 + i * 1.15, y: 0.12 + i * 0.26,
-  blocks: i < 3 ? [4, 12, 4] : [5, 14, 5], pitch: 0.68, kind: 'std', idx: i,
+  blocks: i < 3 ? [4, 12, 4] : [5, 14, 5], pitch: 0.68, kind: 'std',
 }));
 ROW_SPECS.push({ letter: 'L', cls: 'royal', z: 4.85, y: 3.15, blocks: [4, 8, 4], pitch: 1.1, kind: 'rec', pair: true });
 ROW_SPECS.push({ letter: 'M', cls: 'royal', z: 6.65, y: 3.6, blocks: [4, 8, 4], pitch: 1.1, kind: 'rec', pair: true });
@@ -305,7 +467,7 @@ ROW_SPECS.push({ letter: 'M', cls: 'royal', z: 6.65, y: 3.6, blocks: [4, 8, 4], 
   letter: L, cls: 'balcony', z: 9.7 + i * 1.2, y: 6.25 + i * 0.4, blocks: [6, 14, 6], pitch: 0.68, kind: 'std', balcony: true,
 }));
 
-function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let r = Math.imul(a ^ a >>> 15, 1 | a); r = r + Math.imul(r ^ r >>> 7, 61 | r) ^ r; return ((r ^ r >>> 14) >>> 0) / 4294967296; }; }
 const rng = mulberry32(31102026);
 
 const rows = [];
@@ -335,7 +497,6 @@ for (const spec of ROW_SPECS) {
     seats.push(seat); seatById.set(seat.id, seat);
   }
   if (spec.pair) for (const b of blocks) for (let k = 0; k < b.length; k += 2) { b[k].partner = b[k + 1]; b[k + 1].partner = b[k]; }
-  // occupancy: busier in the centre
   for (const b of blocks) for (const seat of b) {
     if (spec.pair && seat.k % 2) continue;
     const central = 1 - Math.abs(seat.s) / (half + 0.01);
@@ -344,16 +505,15 @@ for (const spec of ROW_SPECS) {
   }
   rows.push({ ...spec, R, blocks, gaps: gaps.map((g) => g - half), half, seats: items });
 }
-rows.forEach((r, i) => { r.order = i; });
+const rowIndex = new Map(rows.map((r, i) => [r.letter, i]));
 
 /* ---------------- State ---------------- */
-let picked = [];            // seats in pick order
-let activeClass = null;     // filter
+let picked = [];
+let activeClass = null;
 let quickN = 2;
 let hovered = null;
 let houseOn = true, houseLevel = 1;
 let hd = true;
-let currentView = 'overview';
 
 /* ---------------- Three setup ---------------- */
 const stage = $('#stage');
@@ -366,35 +526,36 @@ try {
 }
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.15;
-renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
 stage.prepend(renderer.domElement);
-renderer.domElement.setAttribute('aria-label', '3D view of the auditorium. Use Quick pick in the panel to choose seats with the keyboard.');
 renderer.domElement.setAttribute('role', 'img');
+renderer.domElement.setAttribute('aria-label', '3D view of the cinema hall. Use Quick pick in the panel to choose seats with the keyboard.');
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#030407');
-scene.fog = new THREE.Fog('#030407', 60, 110);
-const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 200);
-camera.position.set(24, 30, 40);
+const camera = new THREE.PerspectiveCamera(55, 1, 0.08, 120);
+camera.position.set(0, 12.5, 14.6);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
-controls.dampingFactor = 0.08;
-controls.minDistance = 1.5;
-controls.maxDistance = 70;
-controls.target.set(0, 3, -2);
+controls.dampingFactor = 0.09;
+controls.minDistance = 0.6;
+controls.maxDistance = 26;
+controls.zoomToCursor = true;
+controls.rotateSpeed = 0.7;
+controls.target.set(0, 2, -4);
 
 RectAreaLightUniformsLib.init();
+const solids = [];            // meshes double-tap can land on
 
 /* Textures */
 function canvasTex(w, h, draw, repeat) {
   const c = document.createElement('canvas'); c.width = w; c.height = h;
   draw(c.getContext('2d'), w, h);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.anisotropy = 8;
-  if (repeat) t.repeat.set(repeat[0], repeat[1]);
-  return t;
+  const tx = new THREE.CanvasTexture(c);
+  tx.colorSpace = THREE.SRGBColorSpace;
+  tx.wrapS = tx.wrapT = THREE.RepeatWrapping;
+  tx.anisotropy = 8;
+  if (repeat) tx.repeat.set(repeat[0], repeat[1]);
+  return tx;
 }
 const texRng = mulberry32(7);
 const woodTex = canvasTex(512, 512, (g, w, h) => {
@@ -425,17 +586,17 @@ const riserMat = new THREE.MeshStandardMaterial({ color: '#2a130a', roughness: 0
 const wallMat = new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.6 });
 const darkMat = new THREE.MeshStandardMaterial({ color: '#0b0b10', roughness: 0.9 });
 
-/* Room shell (single-sided planes so outside views see in, like a dollhouse) */
-const DEPTH = BACK_WALL_Z + 16, MIDZ = (BACK_WALL_Z - 16) / 2, H = 14;
+/* Room shell */
+const DEPTH = BACK_WALL_Z - FRONT_WALL_Z, MIDZ = (BACK_WALL_Z + FRONT_WALL_Z) / 2;
 function plane(w, h, mat, pos, rot) {
   const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
-  m.position.copy(pos); m.rotation.set(rot[0], rot[1], rot[2]); scene.add(m); return m;
+  m.position.copy(pos); m.rotation.set(rot[0], rot[1], rot[2]); scene.add(m); solids.push(m); return m;
 }
 plane(DEPTH, H, wallMat, new THREE.Vector3(-W - 0.05, H / 2, MIDZ), [0, Math.PI / 2, 0]);
 plane(DEPTH, H, wallMat, new THREE.Vector3(W + 0.05, H / 2, MIDZ), [0, -Math.PI / 2, 0]);
 const backWoodTex = woodTex.clone(); backWoodTex.repeat.set(9, 2); backWoodTex.needsUpdate = true;
 plane(2 * W + 0.1, H, new THREE.MeshStandardMaterial({ map: backWoodTex, roughness: 0.6 }), new THREE.Vector3(0, H / 2, BACK_WALL_Z), [0, Math.PI, 0]);
-plane(2 * W + 0.1, H, darkMat, new THREE.Vector3(0, H / 2, -16), [0, 0, 0]);
+plane(2 * W + 0.1, H, darkMat, new THREE.Vector3(0, H / 2, FRONT_WALL_Z), [0, 0, 0]);
 plane(2 * W + 0.1, DEPTH, new THREE.MeshStandardMaterial({ color: '#0d0e14', roughness: 1 }), new THREE.Vector3(0, H, MIDZ), [Math.PI / 2, 0, 0]);
 plane(2 * W + 0.1, DEPTH, new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.95 }), new THREE.Vector3(0, 0, MIDZ), [-Math.PI / 2, 0, 0]);
 
@@ -448,17 +609,15 @@ function tier(front, back, y0, y1, mats = [carpetMat, riserMat]) {
   for (let i = N; i >= 0; i--) { const x = -W + (2 * W * i) / N; pts.push(new THREE.Vector2(x, -Math.max(back(x), front(x) + 0.01))); }
   const g = new THREE.ExtrudeGeometry(new THREE.Shape(pts), { depth: Math.max(y1 - y0, 0.01), bevelEnabled: false, curveSegments: 1 });
   g.rotateX(-Math.PI / 2); g.translate(0, y0, 0);
-  const m = new THREE.Mesh(g, mats); scene.add(m); return m;
+  const m = new THREE.Mesh(g, mats); scene.add(m); solids.push(m); return m;
 }
 const mainRows = rows.filter((r) => !r.balcony);
 const balcRows = rows.filter((r) => r.balcony);
 mainRows.forEach((r, i) => {
   const prev = mainRows[i - 1], next = mainRows[i + 1];
   r.frontR = prev ? (prev.R + r.R) / 2 : r.R - 0.75;
-  const backR = next ? (r.R + next.R) / 2 : BALCONY_FRONT_R;
-  tier(zArc(r.frontR), zArc(backR), 0, r.y);
+  tier(zArc(r.frontR), zArc(next ? (r.R + next.R) / 2 : BALCONY_FRONT_R), 0, r.y);
 });
-// balcony base block + parapet
 tier(zArc(BALCONY_FRONT_R), zFlat(BACK_WALL_Z), 0, 6.0, [carpetMat, new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.6 })]);
 const parapetMat = new THREE.MeshStandardMaterial({ color: '#1a0c06', roughness: 0.5 });
 tier(zArc(BALCONY_FRONT_R), zArc(BALCONY_FRONT_R + 0.3), 6.0, 7.0, [parapetMat, parapetMat]);
@@ -467,20 +626,29 @@ balcRows.forEach((r, i) => {
   r.frontR = prev ? (prev.R + r.R) / 2 : BALCONY_FRONT_R + 0.3;
   tier(zArc(r.frontR), next ? zArc((r.R + next.R) / 2) : zFlat(BACK_WALL_Z), 6.0, r.y);
 });
-// glowing strip along the parapet
 {
   const pts = []; const R = BALCONY_FRONT_R + 0.02;
   for (let i = 0; i <= 64; i++) { const x = -W + (2 * W * i) / 64; pts.push(new THREE.Vector3(x, 7.0, zArc(R)(x))); }
-  const g = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 128, 0.025, 6, false);
-  scene.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: '#ffb066' })));
+  scene.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 128, 0.025, 6, false), new THREE.MeshBasicMaterial({ color: '#ffb066' })));
+}
+
+/* Floor height under any point — keeps the camera above the steps */
+function groundY(x, z) {
+  if (z < -13.4) return 0.8;
+  const r = Math.hypot(x, z - CZ);
+  let g = 0;
+  for (const row of mainRows) if (r >= row.frontR) g = row.y;
+  if (r >= BALCONY_FRONT_R) g = 7.0;
+  for (const row of balcRows) if (r >= row.frontR) g = row.y;
+  return g;
 }
 
 /* Aisle step lights */
 {
   const pos = [];
-  for (const r of rows) for (const g of r.gaps) {
-    const R = r.frontR; const th = g / r.R;
-    pos.push([R * Math.sin(th), r.y - 0.06, CZ + R * Math.cos(th), th]);
+  for (const r of rows) for (const gp of r.gaps) {
+    const th = gp / r.R;
+    pos.push([r.frontR * Math.sin(th), r.y - 0.06, CZ + r.frontR * Math.cos(th), th]);
   }
   const m = new THREE.InstancedMesh(new THREE.BoxGeometry(0.34, 0.035, 0.03), new THREE.MeshBasicMaterial({ color: '#ffcf8a' }), pos.length);
   const o = new THREE.Object3D();
@@ -488,7 +656,7 @@ balcRows.forEach((r, i) => {
   scene.add(m);
 }
 
-/* Screen */
+/* Screen: built-in film, or the viewer's own video */
 const titleCanvas = document.createElement('canvas'); titleCanvas.width = 1024; titleCanvas.height = 436;
 const titleTex = new THREE.CanvasTexture(titleCanvas);
 function drawTitle() {
@@ -503,17 +671,27 @@ function drawTitle() {
 }
 drawTitle();
 document.fonts?.ready.then(drawTitle);
+
+const video = document.createElement('video');
+video.loop = true; video.playsInline = true; video.setAttribute('playsinline', ''); video.preload = 'auto';
+const videoTex = new THREE.VideoTexture(video);
+videoTex.minFilter = THREE.LinearFilter; videoTex.magFilter = THREE.LinearFilter; videoTex.generateMipmaps = false;
+
 const screenMat = new THREE.ShaderMaterial({
-  uniforms: { uTime: { value: 0 }, uTitle: { value: titleTex }, uTitleMix: { value: 0 } },
+  uniforms: {
+    uTime: { value: 0 }, uTitle: { value: titleTex }, uTitleMix: { value: 0 },
+    uVideo: { value: videoTex }, uUseVideo: { value: 0 }, uVidScale: { value: new THREE.Vector2(1, 1) },
+  },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
   fragmentShader: `
     varying vec2 vUv; uniform float uTime; uniform sampler2D uTitle; uniform float uTitleMix;
+    uniform sampler2D uVideo; uniform float uUseVideo; uniform vec2 uVidScale;
     float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
     float noise(vec2 p){ vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.0-2.0*f);
       return mix(mix(hash(i),hash(i+vec2(1,0)),u.x), mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),u.x), u.y); }
     float fbm(vec2 p){ float v=0.0, a=0.5; for(int i=0;i<5;i++){ v+=a*noise(p); p*=2.03; a*=0.5; } return v; }
-    void main(){
-      vec2 uv = vUv; float T = uTime;
+    vec3 film(vec2 uv){
+      float T = uTime;
       vec3 low = vec3(1.0,0.70,0.38), mid = vec3(0.86,0.36,0.22), top = vec3(0.10,0.06,0.20);
       vec3 col = mix(low, mid, smoothstep(0.28,0.55,uv.y));
       col = mix(col, top, smoothstep(0.5,1.0,uv.y));
@@ -521,48 +699,50 @@ const screenMat = new THREE.ShaderMaterial({
       float d = length((uv-sp)*vec2(2.35,1.0));
       col += vec3(1.0,0.78,0.5)*smoothstep(0.085,0.07,d) + vec3(1.0,0.5,0.25)*exp(-d*6.0)*0.45;
       float c = fbm(vec2(uv.x*3.0 + T*0.025, uv.y*5.0 - T*0.01));
-      float cloud = smoothstep(0.42,0.78,c) * smoothstep(0.33,0.7,uv.y);
-      col = mix(col, vec3(0.15,0.09,0.17), cloud*0.85);
-      // hills
+      col = mix(col, vec3(0.15,0.09,0.17), smoothstep(0.42,0.78,c) * smoothstep(0.33,0.7,uv.y)*0.85);
       float hl = 0.30 + 0.16*smoothstep(0.5,0.0,uv.x)*(0.6+0.5*fbm(vec2(uv.x*5.0,2.0))) + 0.03*fbm(vec2(uv.x*14.0,5.0));
-      // sea
       vec3 seaCol = mix(vec3(0.04,0.03,0.08), vec3(0.62,0.30,0.20), smoothstep(0.0,0.3,uv.y));
       float sh = noise(vec2(uv.x*90.0, uv.y*320.0 - T*0.8)) * smoothstep(0.14,0.0,abs(uv.x-sp.x));
       seaCol += vec3(1.0,0.7,0.4)*sh*0.7*smoothstep(0.0,0.3,uv.y);
       col = mix(col, seaCol, step(uv.y, 0.30));
       col = mix(col, vec3(0.035,0.025,0.05), step(uv.y, hl)*step(0.29, uv.y));
-      // rain
       float cx = floor(uv.x*260.0);
-      float rn = step(0.975, hash(vec2(cx, floor(uv.y*10.0 + T*7.0 + hash(vec2(cx,3.0))*10.0))));
-      col += rn*0.12;
-      // lightning
-      float fl = smoothstep(0.97,1.0, sin(T*0.71)*sin(T*1.33));
-      col += fl*vec3(0.55,0.6,0.9)*0.7*uv.y;
-      // title card
+      col += step(0.975, hash(vec2(cx, floor(uv.y*10.0 + T*7.0 + hash(vec2(cx,3.0))*10.0))))*0.12;
+      col += smoothstep(0.97,1.0, sin(T*0.71)*sin(T*1.33))*vec3(0.55,0.6,0.9)*0.7*uv.y;
       vec4 tt = texture2D(uTitle, uv);
       col = mix(col, col*0.3, uTitleMix*0.7);
       col = mix(col, vec3(1.0,0.95,0.88), tt.a*uTitleMix);
-      col *= 0.72 + 0.28*smoothstep(0.95,0.25,length(uv-0.5));
+      return col;
+    }
+    void main(){
+      vec3 col;
+      if (uUseVideo > 0.5) {
+        vec2 v = (vUv - 0.5) / uVidScale + 0.5;
+        float inside = step(0.0, v.x) * step(v.x, 1.0) * step(0.0, v.y) * step(v.y, 1.0);
+        col = texture2D(uVideo, clamp(v, 0.0, 1.0)).rgb * inside;
+      } else {
+        col = film(vUv);
+      }
+      col *= 0.8 + 0.2*smoothstep(0.95,0.25,length(vUv-0.5));
       gl_FragColor = vec4(col,1.0);
     }`,
   toneMapped: false,
 });
+let screenMesh;
 {
-  const g = new THREE.PlaneGeometry(20, 8.5, 40, 1);
+  const g = new THREE.PlaneGeometry(SCREEN_W, SCREEN_H, 40, 1);
   const p = g.attributes.position;
   for (let i = 0; i < p.count; i++) { const x = p.getX(i); p.setZ(i, (x / 10) * (x / 10) * 0.7); }
-  const screen = new THREE.Mesh(g, screenMat);
-  screen.position.set(0, SCREEN_Y, SCREEN_Z);
-  scene.add(screen);
+  screenMesh = new THREE.Mesh(g, screenMat);
+  screenMesh.position.set(0, SCREEN_Y, SCREEN_Z);
+  scene.add(screenMesh); solids.push(screenMesh);
   const mask = new THREE.Mesh(new THREE.PlaneGeometry(21.6, 9.8), new THREE.MeshBasicMaterial({ color: '#000' }));
-  mask.position.set(0, SCREEN_Y, SCREEN_Z - 0.05); scene.add(mask);
-  // stage platform
+  mask.position.set(0, SCREEN_Y, SCREEN_Z - 0.05); scene.add(mask); solids.push(mask);
   const stageBox = new THREE.Mesh(new THREE.BoxGeometry(26.9, 0.8, 2.6), new THREE.MeshStandardMaterial({ color: '#1c0e07', roughness: 0.55 }));
-  stageBox.position.set(0, 0.4, -14.7); scene.add(stageBox);
+  stageBox.position.set(0, 0.4, -14.7); scene.add(stageBox); solids.push(stageBox);
   const strip = new THREE.Mesh(new THREE.BoxGeometry(26.9, 0.04, 0.04), new THREE.MeshBasicMaterial({ color: '#ff9a4d' }));
   strip.position.set(0, 0.78, -13.38); scene.add(strip);
 }
-/* Curtains */
 function curtain(w, h, folds) {
   const g = new THREE.PlaneGeometry(w, h, folds * 8, 1);
   const p = g.attributes.position;
@@ -571,22 +751,16 @@ function curtain(w, h, folds) {
   return g;
 }
 const curtainMat = new THREE.MeshStandardMaterial({ color: '#7d0f16', roughness: 0.75, side: THREE.DoubleSide });
-for (const sx of [-1, 1]) {
-  const c = new THREE.Mesh(curtain(3.2, 12.6, 7), curtainMat);
-  c.position.set(sx * 11.85, 6.3, -15.35); scene.add(c);
-}
-{
-  const v = new THREE.Mesh(curtain(27, 2.2, 26), curtainMat);
-  v.position.set(0, 12.6, -15.3); scene.add(v);
-}
+for (const sx of [-1, 1]) { const c = new THREE.Mesh(curtain(3.2, 12.6, 7), curtainMat); c.position.set(sx * 11.85, 6.3, -15.35); scene.add(c); solids.push(c); }
+{ const v = new THREE.Mesh(curtain(27, 2.2, 26), curtainMat); v.position.set(0, 12.6, -15.3); scene.add(v); solids.push(v); }
 
-/* Wall sconces, ceiling dots, exit signs */
+/* Sconces, ceiling dots, exits, row letters */
 const glowMat = new THREE.MeshBasicMaterial({ color: '#ffc58a' });
 {
   const zs = [-10, -4.5, 1, 6.5, 12];
   const m = new THREE.InstancedMesh(new THREE.BoxGeometry(0.12, 1.1, 0.28), glowMat, zs.length * 2);
   const o = new THREE.Object3D(); let i = 0;
-  for (const sx of [-1, 1]) for (const z of zs) { o.position.set(sx * (W - 0.06), 4.6, z); o.updateMatrix(); m.setMatrixAt(i++, o.matrix); }
+  for (const sx of [-1, 1]) for (const z of zs) { o.position.set(sx * (W - 0.06), z > 8 ? 9.6 : 4.6, z); o.updateMatrix(); m.setMatrixAt(i++, o.matrix); }
   scene.add(m);
   const dots = [];
   for (let x = -11; x <= 11; x += 2.75) for (let z = -12; z <= 14; z += 2.6) dots.push([x + (Math.abs(z) % 2) * 0.6, z]);
@@ -594,35 +768,30 @@ const glowMat = new THREE.MeshBasicMaterial({ color: '#ffc58a' });
   dots.forEach(([x, z], k) => { o.position.set(x, H - 0.02, z); o.rotation.set(Math.PI / 2, 0, 0); o.updateMatrix(); dm.setMatrixAt(k, o.matrix); });
   scene.add(dm);
 }
-function textSprite(text, { color = '#cfd3e2', size = 0.5, font = '600 80px "JetBrains Mono", monospace', w = 128, h = 128, bg = null } = {}) {
-  const c = document.createElement('canvas'); c.width = w; c.height = h;
+function textSprite(text, { color = '#cfd3e2', size = 0.5 } = {}) {
+  const c = document.createElement('canvas'); c.width = 128; c.height = 128;
   const g = c.getContext('2d');
-  if (bg) { g.fillStyle = bg; g.fillRect(0, 0, w, h); }
-  g.fillStyle = color; g.font = font; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, w / 2, h / 2 + 4);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
-  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false, toneMapped: false }));
-  s.scale.set(size * (w / h), size, 1);
+  g.fillStyle = color; g.font = '600 80px "JetBrains Mono", monospace'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 64, 68);
+  const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tx, transparent: true, depthWrite: false, toneMapped: false }));
+  s.scale.set(size, size, 1);
   return s;
 }
-for (const [x, z, ry] of [[-W + 0.03, -11.5, Math.PI / 2], [W - 0.03, -11.5, -Math.PI / 2], [-W + 0.03, 3.8, Math.PI / 2], [W - 0.03, 3.8, -Math.PI / 2]]) {
+for (const [x, z, ry, y] of [[-W + 0.03, -11.5, Math.PI / 2, 0], [W - 0.03, -11.5, -Math.PI / 2, 0], [-W + 0.03, 3.8, Math.PI / 2, 3.0], [W - 0.03, 3.8, -Math.PI / 2, 3.0]]) {
   const c = document.createElement('canvas'); c.width = 256; c.height = 96;
   const g = c.getContext('2d'); g.fillStyle = '#0d7a3a'; g.fillRect(0, 0, 256, 96);
   g.fillStyle = '#e9fff1'; g.font = '700 54px Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('EXIT', 128, 50);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.42), new THREE.MeshBasicMaterial({ map: t, toneMapped: false }));
-  m.position.set(x, 3.4, z); m.rotation.y = ry; scene.add(m);
+  const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.42), new THREE.MeshBasicMaterial({ map: tx, toneMapped: false }));
+  m.position.set(x, 3.4 + y, z); m.rotation.y = ry; scene.add(m);
   const door = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 2.8), new THREE.MeshStandardMaterial({ color: '#0e0a08', roughness: 0.8 }));
-  door.position.set(x + Math.sign(-x) * 0.01, 1.4 + (z > 0 ? 3.0 : 0), z); door.rotation.y = ry; scene.add(door);
+  door.position.set(x - Math.sign(x) * 0.01, 1.4 + y, z); door.rotation.y = ry; scene.add(door);
 }
-// Row letters at both ends
-for (const r of rows) {
-  for (const side of [-1, 1]) {
-    const s = side * (r.half + (r.pair ? 1.0 : 0.75));
-    const th = s / r.R;
-    const sp = textSprite(r.letter, { size: 0.42, color: '#aab0c6' });
-    sp.position.set(r.R * Math.sin(th), r.y + 0.75, CZ + r.R * Math.cos(th));
-    scene.add(sp);
-  }
+for (const r of rows) for (const side of [-1, 1]) {
+  const th = side * (r.half + (r.pair ? 1.0 : 0.75)) / r.R;
+  const sp = textSprite(r.letter, { size: 0.42, color: '#aab0c6' });
+  sp.position.set(r.R * Math.sin(th), r.y + 0.75, CZ + r.R * Math.cos(th));
+  scene.add(sp);
 }
 
 /* Lights */
@@ -632,18 +801,22 @@ const houseLights = [];
 for (const [x, z] of [[-7, -7], [7, -7], [-7, 7], [7, 7]]) {
   const l = new THREE.PointLight('#ffc890', 90, 0, 2); l.position.set(x, 12.5, z); scene.add(l); houseLights.push(l);
 }
-const screenLight = new THREE.RectAreaLight('#ff9a5c', 3, 20, 8.5);
+const screenLight = new THREE.RectAreaLight('#ff9a5c', 3, SCREEN_W, SCREEN_H);
 screenLight.position.set(0, SCREEN_Y, SCREEN_Z + 0.3);
 screenLight.lookAt(0, SCREEN_Y, 10);
 scene.add(screenLight);
+
+/* Landing marker for double-tap jumps */
+const ripple = new THREE.Mesh(new THREE.RingGeometry(0.25, 0.34, 40), new THREE.MeshBasicMaterial({ color: '#5ff6e8', transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
+scene.add(ripple);
+let rippleStart = -1;
 
 /* ---------------- Seats ---------------- */
 function part(geo, shade, x, y, z, rx = 0) {
   geo = geo.index ? geo.toNonIndexed() : geo;
   geo.deleteAttribute('uv');
   geo.rotateX(rx); geo.translate(x, y, z);
-  const n = geo.attributes.position.count;
-  geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3).fill(shade), 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count * 3).fill(shade), 3));
   return geo;
 }
 const RB = (w, h, d, r) => new RoundedBoxGeometry(w, h, d, 2, r);
@@ -684,9 +857,7 @@ const meshLists = new Map([[stdMesh, stdList], [recMesh, recList]]);
   }
 }
 const C = {
-  booked: new THREE.Color('#2b2f3b'),
-  pick: new THREE.Color('#5ff6e8'),
-  white: new THREE.Color('#ffffff'),
+  booked: new THREE.Color('#2b2f3b'), pick: new THREE.Color('#5ff6e8'), white: new THREE.Color('#ffffff'),
   cls: Object.fromEntries(Object.entries(CLASSES).map(([k, v]) => [k, new THREE.Color(v.color)])),
 };
 const tmpC = new THREE.Color();
@@ -701,59 +872,85 @@ function paint(s) { s.mesh.setColorAt(s.idx, seatColor(s, tmpC)); s.mesh.instanc
 function paintAll() { seats.forEach((s) => s.mesh.setColorAt(s.idx, seatColor(s, tmpC))); stdMesh.instanceColor.needsUpdate = true; recMesh.instanceColor.needsUpdate = true; }
 paintAll();
 
-/* ---------------- Camera moves ---------------- */
+/* ---------------- Camera: always inside the hall ---------------- */
+const ROOM = { xPad: 0.5, zMin: -13.1, zMax: BACK_WALL_Z - 0.45, yMax: H - 0.45 };
+function keepInside(v) {
+  v.x = clamp(v.x, -W + ROOM.xPad, W - ROOM.xPad);
+  v.z = clamp(v.z, ROOM.zMin, ROOM.zMax);
+  v.y = clamp(v.y, groundY(v.x, v.z) + 0.55, ROOM.yMax);
+  return v;
+}
+function keepTargetInside(v) {
+  v.x = clamp(v.x, -W + 0.1, W - 0.1);
+  v.z = clamp(v.z, SCREEN_Z, BACK_WALL_Z - 0.1);
+  v.y = clamp(v.y, 0, H - 0.1);
+  return v;
+}
 const VIEWS = {
-  overview: [[-15, 24, 17], [0, 1, -2]],
-  stage: [[0, 4.4, -12.4], [0, 3.6, 6]],
+  overview: [[-11.8, 12.6, 14.6], [0, 1.2, -5]],
+  stage: [[0, 4.4, -12.6], [0, 3.6, 6]],
   balcony: [[0, 9.1, 14.4], [0, 5.4, -15]],
-  bird: [[0, 36, 0.6], [0, 0, 0]],
+  bird: [[0, 13.4, 11.5], [0, 0, -3]],
 };
 let fly = null, tour = null;
-const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
-function flyTo(pos, target, dur = 1.5) {
+const ease = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
+function flyTo(pos, target, dur = 1.4) {
   stopTour();
-  fly = { p0: camera.position.clone(), t0: controls.target.clone(), p1: new THREE.Vector3(...pos), t1: new THREE.Vector3(...target), start: performance.now(), dur: reduceMotion ? 1 : dur * 1000 };
+  const p1 = keepInside(new THREE.Vector3(...pos));
+  fly = { p0: camera.position.clone(), t0: controls.target.clone(), p1, t1: new THREE.Vector3(...target), start: performance.now(), dur: reduceMotion ? 1 : dur * 1000 };
+}
+function markView(name) {
+  document.querySelectorAll('.views [data-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === name)));
 }
 function setView(name) {
-  currentView = name;
-  document.querySelectorAll('.views [data-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === name)));
+  markView(name);
   $('#seatTag').hidden = true;
-  if (VIEWS[name]) flyTo(...VIEWS[name]);
+  flyTo(...VIEWS[name]);
 }
 function seatView(s) {
   const eye = s.pos.clone().add(new THREE.Vector3(Math.sin(s.theta) * 0.15, s.kind === 'rec' ? 1.25 : 1.15, Math.cos(s.theta) * 0.15));
   const look = new THREE.Vector3(0, SCREEN_Y, SCREEN_Z).sub(eye).normalize().multiplyScalar(1.2).add(eye);
-  flyTo(eye.toArray(), look.toArray(), 1.8);
-  currentView = 'seat';
-  document.querySelectorAll('.views [data-view]').forEach((b) => b.setAttribute('aria-pressed', 'false'));
-  const tag = $('#seatTag'); tag.textContent = `View from ${s.row}${s.num} · ${CLASSES[s.cls].name}`; tag.hidden = false;
+  flyTo(eye.toArray(), look.toArray(), 1.6);
+  markView(null);
+  const tag = $('#seatTag'); tag.textContent = t('seat_view', { id: s.id }); tag.hidden = false;
 }
 const tourPath = new THREE.CatmullRomCurve3([
-  [0, 12, 24], [12, 9, 11], [10.5, 4.5, -1], [6, 2.6, -11], [0, 3.4, -12.6], [-7, 3, -9], [-10.5, 6, 4], [-6, 9.6, 13.5], [0, 9.2, 14.5],
+  [0, 12.5, 14.6], [11.5, 10, 8], [11, 5, -2], [6, 2.8, -11], [0, 3.4, -12.6], [-7, 3, -9], [-11, 7, 3], [-6, 10, 13.5], [0, 10, 14.6],
 ].map((p) => new THREE.Vector3(...p)), true, 'centripetal');
 const tourLook = new THREE.CatmullRomCurve3([
   [0, 4, -6], [0, 3, -6], [0, 3, -2], [0, 3, 4], [0, 3.4, 8], [0, 3, 4], [0, 5, -15], [0, 5.5, -15], [0, 5.5, -15],
 ].map((p) => new THREE.Vector3(...p)), true);
+function setTourBtn(on) {
+  $('#tourBtn').setAttribute('aria-pressed', String(on));
+  $('#tourIc').innerHTML = icon(on ? 'stop' : 'play');
+  const l = $('#tourLbl'); l.dataset.t = on ? 'v_stop' : 'v_tour'; l.textContent = t(l.dataset.t);
+}
 function startTour() {
   fly = null; tour = { start: performance.now() };
-  $('#tourBtn').setAttribute('aria-pressed', 'true'); $('#tourBtn').textContent = '■ Stop tour';
-  document.querySelectorAll('.views [data-view]').forEach((b) => b.setAttribute('aria-pressed', 'false'));
-  $('#seatTag').hidden = true;
+  setTourBtn(true); markView(null); $('#seatTag').hidden = true;
 }
-function stopTour() {
-  if (!tour) return;
-  tour = null; $('#tourBtn').setAttribute('aria-pressed', 'false'); $('#tourBtn').textContent = '▶ Tour';
-}
+function stopTour() { if (!tour) return; tour = null; setTourBtn(false); }
+setTourBtn(false);
 controls.addEventListener('start', () => { fly = null; stopTour(); });
+
+function zoomBy(f) {
+  const off = camera.position.clone().sub(controls.target);
+  const d = clamp(off.length() * f, controls.minDistance, controls.maxDistance);
+  off.setLength(d);
+  flyTo(controls.target.clone().add(off).toArray(), controls.target.toArray(), 0.45);
+}
 
 /* ---------------- Interaction ---------------- */
 const raycaster = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
-function seatAt(clientX, clientY) {
+function castAt(clientX, clientY, objects) {
   const r = renderer.domElement.getBoundingClientRect();
   ndc.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
   raycaster.setFromCamera(ndc, camera);
-  const hit = raycaster.intersectObjects([stdMesh, recMesh], false)[0];
+  return raycaster.intersectObjects(objects, false)[0] || null;
+}
+function seatAt(x, y) {
+  const hit = castAt(x, y, [stdMesh, recMesh]);
   return hit ? meshLists.get(hit.object)[hit.instanceId] : null;
 }
 const tip = $('#tip');
@@ -762,10 +959,11 @@ function showTip(s, clientX, clientY) {
   const r = stage.getBoundingClientRect();
   const c = CLASSES[s.cls];
   tip.className = 'tip' + (s.booked ? ' is-booked' : s.selected ? ' is-picked' : '');
-  const price = s.partner ? `${inr(c.price * 2)} per pair` : inr(c.price);
-  tip.innerHTML = `<b>Row ${s.row} · Seat ${s.num}</b><span>${s.booked ? 'Already booked' : s.selected ? 'Your pick · tap to remove' : `${c.name} · ${price}`}</span>`;
-  tip.style.left = Math.min(Math.max(clientX - r.left, 90), r.width - 90) + 'px';
-  tip.style.top = Math.max(clientY - r.top, 60) + 'px';
+  tip.style.setProperty('--cc', s.booked ? 'var(--booked)' : s.selected ? 'var(--pick)' : c.color);
+  const price = s.partner ? t('pair_price', { v: inr(c.price * 2) }) : inr(c.price);
+  tip.innerHTML = `<i class="dot"></i><div><b>${t('row_seat', { r: s.row, n: s.num })}</b><span>${s.booked ? t('tip_booked') : s.selected ? t('tip_pick') : `${cname(s.cls)} · ${price}`}</span></div>`;
+  tip.style.left = clamp(clientX - r.left, 110, r.width - 110) + 'px';
+  tip.style.top = Math.max(clientY - r.top, 80) + 'px';
   tip.hidden = false;
 }
 function setHover(s) {
@@ -774,46 +972,83 @@ function setHover(s) {
   if (old) paint(old); if (s) paint(s);
   renderer.domElement.style.cursor = s ? (s.booked ? 'not-allowed' : 'pointer') : 'grab';
 }
-let downAt = null, moveQueued = null, tapTipTimer = 0;
+
+/* Double-tap / double-click anywhere: jump the camera there */
+const tmpN = new THREE.Vector3();
+function jumpTo(clientX, clientY) {
+  const hit = castAt(clientX, clientY, [stdMesh, recMesh, ...solids]);
+  if (!hit) return;
+  if (meshLists.has(hit.object)) { seatView(meshLists.get(hit.object)[hit.instanceId]); return; }
+  const p = hit.point;
+  tmpN.copy(hit.face.normal).transformDirection(hit.object.matrixWorld);
+  if (tmpN.dot(raycaster.ray.direction) > 0) tmpN.negate();
+  let eye, look;
+  if (tmpN.y > 0.6) {
+    // floor or step: stand there and face the screen
+    eye = new THREE.Vector3(p.x, p.y + 1.55, p.z);
+    keepInside(eye);
+    look = new THREE.Vector3(0, SCREEN_Y, SCREEN_Z).sub(eye).normalize().multiplyScalar(1.2).add(eye);
+  } else {
+    // wall, screen, curtain or ceiling: step back from it and look at the spot
+    const back = hit.object === screenMesh ? 9 : 3.2;
+    eye = p.clone().addScaledVector(tmpN, back);
+    if (tmpN.y < -0.6) eye.y = p.y - 4;
+    keepInside(eye);
+    look = p.clone();
+  }
+  flyTo(eye.toArray(), look.toArray(), 1.3);
+  markView(null); $('#seatTag').hidden = true;
+  ripple.position.copy(p).addScaledVector(tmpN, 0.03);
+  ripple.lookAt(p.clone().add(tmpN));
+  rippleStart = performance.now();
+}
+
+let downAt = null, moveQueued = null, tapTipTimer = 0, pendingTap = null;
 renderer.domElement.addEventListener('pointerdown', (e) => { downAt = { x: e.clientX, y: e.clientY, t: performance.now() }; });
-renderer.domElement.addEventListener('pointermove', (e) => {
-  if (e.pointerType === 'touch') return;
-  moveQueued = { x: e.clientX, y: e.clientY };
-});
+renderer.domElement.addEventListener('pointermove', (e) => { if (e.pointerType !== 'touch') moveQueued = { x: e.clientX, y: e.clientY }; });
 renderer.domElement.addEventListener('pointerleave', () => { moveQueued = null; setHover(null); tip.hidden = true; });
 renderer.domElement.addEventListener('pointerup', (e) => {
   if (!downAt) return;
   const moved = Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y);
   const quick = performance.now() - downAt.t < 600;
   downAt = null;
-  if (moved > 6 || !quick) return;
-  const s = seatAt(e.clientX, e.clientY);
+  if (moved > 8 || !quick) return;
+  const now = performance.now();
+  if (pendingTap && now - pendingTap.t < 330 && Math.hypot(e.clientX - pendingTap.x, e.clientY - pendingTap.y) < 36) {
+    clearTimeout(pendingTap.timer); pendingTap = null;
+    jumpTo(e.clientX, e.clientY);
+    return;
+  }
+  const x = e.clientX, y = e.clientY, touch = e.pointerType === 'touch';
+  pendingTap = { t: now, x, y, timer: setTimeout(() => { pendingTap = null; singleTap(x, y, touch); }, 260) };
+});
+renderer.domElement.addEventListener('dblclick', (e) => e.preventDefault());
+function singleTap(x, y, touch) {
+  const s = seatAt(x, y);
   if (!s) return;
   toggleSeat(s);
-  showTip(s, e.clientX, e.clientY);
-  if (e.pointerType === 'touch') { clearTimeout(tapTipTimer); tapTipTimer = setTimeout(() => { tip.hidden = true; }, 1600); }
-});
-renderer.domElement.addEventListener('dblclick', (e) => {
-  const s = seatAt(e.clientX, e.clientY);
-  if (s) seatView(s);
-});
+  showTip(s, x, y);
+  if (touch) { clearTimeout(tapTipTimer); tapTipTimer = setTimeout(() => { tip.hidden = true; }, 1800); }
+}
 
 function groupOf(s) { return s.partner ? [s, s.partner] : [s]; }
 function toggleSeat(s) {
-  if (s.booked) { toast(`Row ${s.row} · Seat ${s.num} is already booked.`); return; }
+  if (s.booked) { toast(t('t_booked', { id: s.id })); buzz(30); return; }
   const group = groupOf(s);
   if (s.selected) {
     group.forEach((g) => { g.selected = false; });
     picked = picked.filter((p) => !group.includes(p));
   } else {
-    if (picked.length + group.length > MAX_SEATS) { toast(`You can book up to ${MAX_SEATS} seats at a time.`); return; }
-    if (group.some((g) => g.booked)) { toast('The other recliner in this pair is booked.'); return; }
+    if (picked.length + group.length > MAX_SEATS) { toast(t('t_max', { n: MAX_SEATS })); buzz(30); return; }
+    if (group.some((g) => g.booked)) { toast(t('t_pairbooked')); return; }
     group.forEach((g) => { g.selected = true; picked.push(g); });
-    if (s.partner) toast(`Recliners come in pairs, so ${s.partner.id} was added with ${s.id}.`);
+    if (s.partner) toast(t('t_pair', { a: s.partner.id }));
   }
+  buzz(10);
   group.forEach(paint);
   renderPanel();
 }
+function buzz(ms) { try { navigator.vibrate?.(ms); } catch (e) {} }
 function clearPicks() {
   picked.forEach((p) => { p.selected = false; paint(p); });
   picked = [];
@@ -832,7 +1067,7 @@ function bestBlock(n, cls) {
       const run = b.slice(i, i + need);
       if (run.some((x) => x.booked)) continue;
       const mid = (run[0].s + run[need - 1].s) / 2;
-      const score = Math.abs(ri - ideal) * 1.2 + Math.abs(mid) / r.pitch * 0.45;
+      const score = Math.abs(ri - ideal) * 1.2 + (Math.abs(mid) / r.pitch) * 0.45;
       if (!best || score < best.score) best = { score, run };
     }
   });
@@ -846,11 +1081,11 @@ function quickPick() {
     clearPicks();
     run.forEach((s) => { s.selected = true; picked.push(s); paint(s); });
     renderPanel();
-    const extra = run.length > quickN ? ' Recliners come in pairs, so we rounded up.' : '';
-    toast(`Picked ${run[0].id}–${run[run.length - 1].id} in ${CLASSES[cls].name}.${extra}`);
+    toast(t('t_picked', { a: run[0].id, b: run[run.length - 1].id, c: cname(cls) }) + (run.length > quickN ? t('t_round') : ''));
+    buzz(15);
     return;
   }
-  toast(activeClass ? `No ${quickN} seats together left in ${CLASSES[activeClass].name}. Try fewer seats or another class.` : `No ${quickN} seats together are left. Try fewer seats.`);
+  toast(t('t_none', { n: quickN }));
 }
 
 /* ---------------- Panel ---------------- */
@@ -859,27 +1094,25 @@ function renderPanel() {
   $('#classList').innerHTML = CLASS_ORDER.map((k) => {
     const c = CLASSES[k];
     return `<button type="button" class="class-card" data-cls="${k}" aria-pressed="${activeClass === k}" style="--cc:${c.color}">
-      <span class="bar"></span>
-      <span><strong>${c.name}</strong><small>${c.desc}</small></span>
-      <span class="price"><strong>${inr(c.price)}</strong><small>${seatsLeft(k)} left</small></span></button>`;
+      <span class="seat-ic">${icon(k === 'royal' ? 'pair' : 'seat')}</span>
+      <span><strong>${cname(k)}</strong><small>${t('d_' + k)}</small></span>
+      <span class="price"><strong>${inr(c.price)}</strong><small>${t('left', { n: seatsLeft(k) })}</small></span></button>`;
   }).join('');
-  const sorted = [...picked].sort((a, b) => a.rowRef === b.rowRef ? a.num - b.num : rows.findIndex((r) => r.letter === a.row) - rows.findIndex((r) => r.letter === b.row));
+  const sorted = [...picked].sort((a, b) => (a.row === b.row ? a.num - b.num : rowIndex.get(a.row) - rowIndex.get(b.row)));
   $('#chips').innerHTML = sorted.map((s) => `<span class="chip" style="--cc:${CLASSES[s.cls].color}">
-      <button type="button" data-view-seat="${s.id}" title="See the view from ${s.id}"><i></i>${s.id}</button>
-      <button type="button" class="x" data-remove="${s.id}" aria-label="Remove ${s.id}">×</button></span>`).join('');
+      <button type="button" data-view-seat="${s.id}" title="${t('seat_view', { id: s.id })}">${icon('seat')}${s.id}</button>
+      <button type="button" class="x" data-remove="${s.id}" aria-label="Remove ${s.id}">${icon('x')}</button></span>`).join('');
   $('#emptySeats').hidden = picked.length > 0;
   $('#clearBtn').hidden = picked.length === 0;
   const sub = picked.reduce((a, s) => a + CLASSES[s.cls].price, 0);
   const fees = picked.length * FEE;
-  $('#ticketLine').textContent = `${picked.length} ticket${picked.length === 1 ? '' : 's'}`;
-  $('#feeLine').textContent = `+ fees ${inr(fees)}`;
+  $('#ticketLine').textContent = picked.length === 1 ? t('ticket1') : t('tickets', { n: picked.length });
+  $('#feeLine').textContent = t('fees', { v: inr(fees) });
   $('#total').textContent = inr(sub + fees);
   $('#continueBtn').disabled = picked.length === 0;
   $('#qCount').textContent = quickN;
-  $('#bestBtn').textContent = `Best ${quickN} seat${quickN === 1 ? '' : 's'}`;
-  $('#quickHint').textContent = activeClass
-    ? `Finds ${quickN} seats together in ${CLASSES[activeClass].name}, centred at the best viewing distance.`
-    : `Finds ${quickN} seats together, starting with Prime. Pick a class above to search only there.`;
+  $('#bestLbl').textContent = quickN === 1 ? t('best1') : t('best', { n: quickN });
+  $('#quickHint').textContent = activeClass ? t('quick_cls', { n: quickN, c: cname(activeClass) }) : t('quick_all', { n: quickN });
 }
 $('#classList').addEventListener('click', (e) => {
   const b = e.target.closest('[data-cls]'); if (!b) return;
@@ -890,7 +1123,7 @@ $('#chips').addEventListener('click', (e) => {
   const rm = e.target.closest('[data-remove]');
   if (rm) { toggleSeat(seatById.get(rm.dataset.remove)); return; }
   const v = e.target.closest('[data-view-seat]');
-  if (v) seatView(seatById.get(v.dataset.viewSeat));
+  if (v) { seatView(seatById.get(v.dataset.viewSeat)); if (matchMedia('(max-width: 900px)').matches) stage.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' }); }
 });
 $('#qMinus').addEventListener('click', () => { quickN = Math.max(1, quickN - 1); renderPanel(); });
 $('#qPlus').addEventListener('click', () => { quickN = Math.min(MAX_SEATS, quickN + 1); renderPanel(); });
@@ -898,89 +1131,167 @@ $('#bestBtn').addEventListener('click', quickPick);
 $('#clearBtn').addEventListener('click', clearPicks);
 document.querySelectorAll('.views [data-view]').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
 $('#tourBtn').addEventListener('click', () => (tour ? stopTour() : startTour()));
+$('#zoomIn').addEventListener('click', () => zoomBy(0.65));
+$('#zoomOut').addEventListener('click', () => zoomBy(1.5));
+$('#resetBtn').addEventListener('click', () => setView('overview'));
 $('#lightsBtn').addEventListener('click', (e) => { houseOn = !houseOn; e.currentTarget.setAttribute('aria-pressed', String(houseOn)); });
 $('#hdBtn').addEventListener('click', (e) => { hd = !hd; e.currentTarget.setAttribute('aria-pressed', String(hd)); resize(); });
+$('#langBtn').addEventListener('click', () => {
+  window.lang = window.lang === 'ta' ? 'en' : 'ta';
+  try { localStorage.setItem('lumen-lang', window.lang); } catch (e) {}
+  window.applyStatic(); renderPanel(); setVideoUi();
+  if (!$('#seatTag').hidden) $('#seatTag').hidden = true;
+  if (!modal.hidden && modal.dataset.view) VIEWS_MODAL[modal.dataset.view]();
+});
 
 let toastTimer = 0;
 function toast(msg) {
-  const t = $('#toast'); t.textContent = msg; t.hidden = false;
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 2800);
+  const el = $('#toast'); el.textContent = msg; el.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; }, 3000);
 }
 
-/* ---------------- Checkout ---------------- */
+/* ---------------- Your own video on the screen ---------------- */
+let videoUrl = null;
+const sampleCanvas = document.createElement('canvas'); sampleCanvas.width = sampleCanvas.height = 4;
+const sampleCtx = sampleCanvas.getContext('2d', { willReadFrequently: true });
+const videoTint = new THREE.Color(1, 0.6, 0.38);
+let lastSample = 0;
+function setVideoUi() {
+  const on = !!videoUrl;
+  const lbl = $('#videoBtn .lbl-sm'); lbl.dataset.t = on ? 'change_video' : 'my_video'; lbl.textContent = t(lbl.dataset.t);
+  ['#vidPlay', '#vidMute', '#vidRemove'].forEach((s) => { $(s).hidden = !on; });
+  const vp = $('#vidPlay'); vp.innerHTML = icon(video.paused ? 'play' : 'pause'); vp.dataset.ta = video.paused ? 'play' : 'pause';
+  const vm = $('#vidMute'); vm.innerHTML = icon(video.muted ? 'mute' : 'sound');
+  window.applyStatic();
+}
+function loadVideo(file) {
+  if (!file) return;
+  if (!file.type.startsWith('video/') && !/\.(mp4|webm|mov|m4v|ogv)$/i.test(file.name)) { toast(t('t_notvideo')); return; }
+  if (videoUrl) URL.revokeObjectURL(videoUrl);
+  videoUrl = URL.createObjectURL(file);
+  video.src = videoUrl;
+  video.muted = false;
+  video.onloadedmetadata = () => {
+    const sa = SCREEN_W / SCREEN_H, va = (video.videoWidth || 16) / (video.videoHeight || 9);
+    screenMat.uniforms.uVidScale.value.set(va > sa ? 1 : va / sa, va > sa ? sa / va : 1);
+  };
+  video.onerror = () => { toast(t('t_videofail')); removeVideo(); };
+  const started = () => { screenMat.uniforms.uUseVideo.value = 1; houseOn = false; $('#lightsBtn').setAttribute('aria-pressed', 'false'); setVideoUi(); };
+  video.play().then(() => { started(); toast(t('t_video')); }).catch(() => {
+    video.muted = true;
+    video.play().then(() => { started(); toast(t('t_muted')); }).catch(() => { toast(t('t_videofail')); removeVideo(); });
+  });
+}
+function removeVideo() {
+  video.pause(); video.removeAttribute('src'); video.load();
+  if (videoUrl) URL.revokeObjectURL(videoUrl);
+  videoUrl = null; screenMat.uniforms.uUseVideo.value = 0; setVideoUi();
+}
+$('#videoInput').addEventListener('change', (e) => { loadVideo(e.target.files[0]); e.target.value = ''; });
+$('#vidPlay').addEventListener('click', () => { if (video.paused) video.play().catch(() => {}); else video.pause(); setTimeout(setVideoUi, 50); });
+$('#vidMute').addEventListener('click', () => { video.muted = !video.muted; if (video.paused) video.play().catch(() => {}); setVideoUi(); });
+$('#vidRemove').addEventListener('click', removeVideo);
+video.addEventListener('play', setVideoUi); video.addEventListener('pause', setVideoUi);
+stage.addEventListener('dragover', (e) => { if ([...(e.dataTransfer?.types || [])].includes('Files')) { e.preventDefault(); stage.classList.add('dragging-file'); } });
+stage.addEventListener('dragleave', (e) => { if (!stage.contains(e.relatedTarget)) stage.classList.remove('dragging-file'); });
+stage.addEventListener('drop', (e) => { e.preventDefault(); stage.classList.remove('dragging-file'); loadVideo(e.dataTransfer.files[0]); });
+setVideoUi();
+
+/* ---------------- Help + checkout dialogs ---------------- */
 const SNACKS = [
-  { id: 'pop', name: 'Salted popcorn, large', price: 280, tone: '#ffd36b', tag: 'POP' },
-  { id: 'car', name: 'Caramel popcorn, large', price: 320, tone: '#e0a04a', tag: 'CAR' },
-  { id: 'nac', name: 'Nachos with cheese dip', price: 260, tone: '#ffb347', tag: 'NAC' },
-  { id: 'cof', name: 'Cold coffee', price: 220, tone: '#c9a27e', tag: 'COF' },
-  { id: 'cmb', name: 'Combo · 2 popcorn + 2 drinks', price: 690, tone: '#5ff6e8', tag: 'x2' },
+  { id: 'pop', price: 280, tone: '#ffd36b', tag: 'POP' },
+  { id: 'car', price: 320, tone: '#e0a04a', tag: 'CAR' },
+  { id: 'nac', price: 260, tone: '#ffb347', tag: 'NAC' },
+  { id: 'cof', price: 220, tone: '#c9a27e', tag: 'COF' },
+  { id: 'cmb', price: 690, tone: '#5ff6e8', tag: '×2' },
 ];
 const cart = {};
 const modal = $('#modal'), sheet = $('#sheet');
-let lastFocus = null;
-function setStep(n) { [1, 2, 3].forEach((i) => $('#step' + i).toggleAttribute('aria-current', false)); $('#step' + n).setAttribute('aria-current', 'step'); }
-function openModal(render) { lastFocus = document.activeElement; modal.hidden = false; render(); }
-function closeModal() { modal.hidden = true; setStep(1); lastFocus?.focus?.(); }
+let lastFocus = null, lastTicket = null;
+function setStep(n) { [1, 2, 3].forEach((i) => $('#step' + i).removeAttribute('aria-current')); $('#step' + n).setAttribute('aria-current', 'step'); }
+function openModal(view) { if (modal.hidden) lastFocus = document.activeElement; modal.hidden = false; VIEWS_MODAL[view](); }
+function closeModal() { modal.hidden = true; modal.dataset.view = ''; setStep(1); lastFocus?.focus?.(); }
 function snackTotal() { return SNACKS.reduce((a, s) => a + (cart[s.id] || 0) * s.price, 0); }
-function renderSnacks() {
-  setStep(2);
-  sheet.innerHTML = `<div><h2 id="sheetTitle">Add snacks</h2><p class="sub">Delivered to your seat${picked.some((p) => p.cls === 'royal') ? ' (recliners) or ready at the counter' : ' or ready at the counter'} before the interval.</p></div>
-    <div class="snacks">${SNACKS.map((s) => `<div class="snack">
-      <span class="art" style="background:${s.tone}">${s.tag}</span>
-      <span><strong>${s.name}</strong><small>${inr(s.price)}</small></span>
-      <span class="stepper"><button type="button" data-snack="${s.id}" data-d="-1" aria-label="Remove one ${s.name}">−</button><output>${cart[s.id] || 0}</output><button type="button" data-snack="${s.id}" data-d="1" aria-label="Add one ${s.name}">+</button></span>
-    </div>`).join('')}</div>
-    <div class="sheet-actions"><button type="button" class="ghost" id="backSeats">Back</button><button type="button" class="cta" id="toReview">Review · ${inr(orderTotal())}</button></div>`;
-  sheet.querySelector('#toReview').focus();
-}
 function orderTotal() { return picked.reduce((a, s) => a + CLASSES[s.cls].price, 0) + picked.length * FEE + snackTotal(); }
-function renderReview() {
-  setStep(3);
-  const byCls = CLASS_ORDER.map((k) => [k, picked.filter((p) => p.cls === k)]).filter(([, l]) => l.length);
-  const snackRows = SNACKS.filter((s) => cart[s.id]).map((s) => `<tr><td>${s.name} × ${cart[s.id]}</td><td>${inr(s.price * cart[s.id])}</td></tr>`).join('');
-  sheet.innerHTML = `<div><h2 id="sheetTitle">Review your booking</h2><p class="sub">Kaalam · Sat 31 Oct · 10:40 PM · Lumen Talkies, Screen 2</p></div>
-    <table class="lines-table"><tbody>
-      ${byCls.map(([k, l]) => `<tr><td>${CLASSES[k].name} × ${l.length}<span class="muted">${l.map((s) => s.id).join(', ')}</span></td><td>${inr(CLASSES[k].price * l.length)}</td></tr>`).join('')}
-      ${snackRows}
-      <tr><td>Convenience fee (${inr(FEE)} per ticket)</td><td>${inr(picked.length * FEE)}</td></tr>
-      <tr class="total-row"><td>Total</td><td>${inr(orderTotal())}</td></tr>
-    </tbody></table>
-    <div class="sheet-actions"><button type="button" class="ghost" id="backSnacks">Back</button><button type="button" class="cta" id="confirm">Confirm booking</button></div>
-    <p class="demo-note">Demo checkout. No payment is taken.</p>`;
-  sheet.querySelector('#confirm').focus();
-}
-function renderTicket() {
-  const id = 'LMN-' + Math.random().toString(36).slice(2, 8).toUpperCase();
-  const list = [...picked].map((s) => s.id).join(', ');
-  const snacks = SNACKS.filter((s) => cart[s.id]).map((s) => `${cart[s.id]}× ${s.name}`).join(', ') || 'None';
-  const paid = orderTotal();
-  picked.forEach((p) => { p.selected = false; p.booked = true; paint(p); });
-  picked = []; Object.keys(cart).forEach((k) => delete cart[k]);
-  renderPanel();
-  sheet.innerHTML = `<div><h2 id="sheetTitle">You're booked</h2><p class="sub">Show this at the entry. Your seats are now marked booked in the hall.</p></div>
-    <div class="ticket">
-      <div class="ticket-top"><span class="t-title">KAALAM</span><small>Sat 31 Oct · 10:40 PM · Lumen Talkies, Anna Nagar · Screen 2</small></div>
-      <div class="ticket-body">
-        <dl><dt>Booking</dt><dd>${id}</dd><dt>Seats</dt><dd>${list}</dd><dt>Snacks</dt><dd>${snacks}</dd><dt>Paid</dt><dd>${inr(paid)}</dd></dl>
-        <canvas id="qr" width="25" height="25" aria-label="Entry code"></canvas>
+const VIEWS_MODAL = {
+  help() {
+    modal.dataset.view = 'help';
+    const cards = [['tap', 'help_tap', 'var(--c-prime)'], ['dbl', 'help_dbl', 'var(--pick)'], ['drag', 'help_drag', 'var(--c-balcony)'], ['zoom', 'help_zoom', 'var(--c-classic)']];
+    sheet.innerHTML = `<h2 id="sheetTitle">${t('help_title')}</h2>
+      <div class="help-grid">${cards.map(([ic, k, c]) => `<div class="help-card" style="--hc:${c}"><span class="big">${icon(ic)}</span>${t(k)}</div>`).join('')}
+        <div class="help-card wide" style="--hc:var(--accent)"><span class="big">${icon('film')}</span>${t('help_video')}</div></div>
+      <div class="sheet-actions"><button type="button" class="cta" id="gotIt">${t('got_it')}</button></div>`;
+    sheet.querySelector('#gotIt').focus();
+  },
+  snacks() {
+    modal.dataset.view = 'snacks'; setStep(2);
+    sheet.innerHTML = `<div><h2 id="sheetTitle">${t('snacks_title')}</h2><p class="sub">${t('snacks_sub')}</p></div>
+      <div class="snacks">${SNACKS.map((s) => `<div class="snack">
+        <span class="art" style="background:${s.tone}">${s.tag}</span>
+        <span><strong>${t('s_' + s.id)}</strong><small>${inr(s.price)}</small></span>
+        <span class="stepper"><button type="button" data-snack="${s.id}" data-d="-1" aria-label="− ${t('s_' + s.id)}">${icon('minus')}</button><output>${cart[s.id] || 0}</output><button type="button" data-snack="${s.id}" data-d="1" aria-label="+ ${t('s_' + s.id)}">${icon('plus')}</button></span>
+      </div>`).join('')}</div>
+      <div class="sheet-actions"><button type="button" class="ghost" id="backSeats">${icon('back')}${t('back')}</button><button type="button" class="cta" id="toReview">${t('review', { v: inr(orderTotal()) })}</button></div>`;
+  },
+  review() {
+    modal.dataset.view = 'review'; setStep(3);
+    const byCls = CLASS_ORDER.map((k) => [k, picked.filter((p) => p.cls === k)]).filter(([, l]) => l.length);
+    const snackRows = SNACKS.filter((s) => cart[s.id]).map((s) => `<tr><td>${t('s_' + s.id)} × ${cart[s.id]}</td><td>${inr(s.price * cart[s.id])}</td></tr>`).join('');
+    sheet.innerHTML = `<div><h2 id="sheetTitle">${t('review_title')}</h2><p class="sub">${t('screen_info')}</p></div>
+      <table class="lines-table"><tbody>
+        ${byCls.map(([k, l]) => `<tr><td>${cname(k)} × ${l.length}<span class="muted">${l.map((s) => s.id).join(', ')}</span></td><td>${inr(CLASSES[k].price * l.length)}</td></tr>`).join('')}
+        ${snackRows}
+        <tr><td>${t('fee_line', { v: inr(FEE) })}</td><td>${inr(picked.length * FEE)}</td></tr>
+        <tr class="total-row"><td>${t('total')}</td><td>${inr(orderTotal())}</td></tr>
+      </tbody></table>
+      <div class="sheet-actions"><button type="button" class="ghost" id="backSnacks">${icon('back')}${t('back')}</button><button type="button" class="cta" id="confirm">${t('confirm')}</button></div>
+      <p class="demo-note">${t('demo')}</p>`;
+    sheet.querySelector('#confirm').focus();
+  },
+  ticket() {
+    modal.dataset.view = 'ticket';
+    if (!lastTicket) {
+      lastTicket = {
+        id: 'LMN-' + Math.random().toString(36).slice(2, 8).toUpperCase(),
+        seats: [...picked].map((s) => s.id).join(', '),
+        snacks: SNACKS.filter((s) => cart[s.id]).map((s) => [s.id, cart[s.id]]),
+        paid: orderTotal(),
+      };
+      picked.forEach((p) => { p.selected = false; p.booked = true; paint(p); });
+      picked = []; Object.keys(cart).forEach((k) => delete cart[k]);
+      renderPanel();
+    }
+    const tk = lastTicket;
+    const snacks = tk.snacks.map(([id, n]) => `${n}× ${t('s_' + id)}`).join(', ') || t('none');
+    sheet.innerHTML = `<div><h2 id="sheetTitle">${t('booked_title')}</h2><p class="sub">${t('booked_sub')}</p></div>
+      <div class="ticket">
+        <div class="ticket-top"><span class="t-title">KAALAM</span><small>${t('screen_info')}</small></div>
+        <div class="ticket-body">
+          <dl><dt>${t('b_booking')}</dt><dd>${tk.id}</dd><dt>${t('b_seats')}</dt><dd>${tk.seats}</dd><dt>${t('b_snacks')}</dt><dd>${snacks}</dd><dt>${t('b_paid')}</dt><dd>${inr(tk.paid)}</dd></dl>
+          <canvas id="qr" width="25" height="25" aria-label="Entry code"></canvas>
+        </div>
       </div>
-    </div>
-    <div class="sheet-actions"><button type="button" class="cta" id="done">Done</button></div>`;
-  const g = sheet.querySelector('#qr').getContext('2d');
-  const r = mulberry32([...id].reduce((a, ch) => a * 31 + ch.charCodeAt(0), 7));
-  g.fillStyle = '#fff'; g.fillRect(0, 0, 25, 25); g.fillStyle = '#10121a';
-  for (let y = 0; y < 25; y++) for (let x = 0; x < 25; x++) if (r() > 0.5) g.fillRect(x, y, 1, 1);
-  for (const [fx, fy] of [[0, 0], [18, 0], [0, 18]]) { g.fillStyle = '#10121a'; g.fillRect(fx, fy, 7, 7); g.fillStyle = '#fff'; g.fillRect(fx + 1, fy + 1, 5, 5); g.fillStyle = '#10121a'; g.fillRect(fx + 2, fy + 2, 3, 3); }
-  sheet.querySelector('#done').focus();
-}
-$('#continueBtn').addEventListener('click', () => openModal(renderSnacks));
+      <div class="sheet-actions"><button type="button" class="cta" id="done">${t('done')}</button></div>`;
+    const g = sheet.querySelector('#qr').getContext('2d');
+    const r = mulberry32([...tk.id].reduce((a, ch) => a * 31 + ch.charCodeAt(0), 7));
+    g.fillStyle = '#fff'; g.fillRect(0, 0, 25, 25); g.fillStyle = '#10121a';
+    for (let y = 0; y < 25; y++) for (let x = 0; x < 25; x++) if (r() > 0.5) g.fillRect(x, y, 1, 1);
+    for (const [fx, fy] of [[0, 0], [18, 0], [0, 18]]) { g.fillStyle = '#10121a'; g.fillRect(fx, fy, 7, 7); g.fillStyle = '#fff'; g.fillRect(fx + 1, fy + 1, 5, 5); g.fillStyle = '#10121a'; g.fillRect(fx + 2, fy + 2, 3, 3); }
+    sheet.querySelector('#done').focus();
+  },
+};
+$('#continueBtn').addEventListener('click', () => { lastTicket = null; openModal('snacks'); });
+$('#helpBtn').addEventListener('click', () => openModal('help'));
 sheet.addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
-  if (b.dataset.snack) { const k = b.dataset.snack; cart[k] = Math.max(0, Math.min(9, (cart[k] || 0) + Number(b.dataset.d))); renderSnacks(); sheet.querySelector(`[data-snack="${k}"][data-d="${b.dataset.d}"]`)?.focus(); return; }
-  if (b.id === 'backSeats' || b.id === 'done') closeModal();
-  if (b.id === 'toReview') renderReview();
-  if (b.id === 'backSnacks') renderSnacks();
-  if (b.id === 'confirm') renderTicket();
+  if (b.dataset.snack) {
+    const k = b.dataset.snack; cart[k] = clamp((cart[k] || 0) + Number(b.dataset.d), 0, 9);
+    VIEWS_MODAL.snacks(); sheet.querySelector(`[data-snack="${k}"][data-d="${b.dataset.d}"]`)?.focus(); return;
+  }
+  if (b.id === 'backSeats' || b.id === 'done' || b.id === 'gotIt') closeModal();
+  if (b.id === 'toReview') VIEWS_MODAL.review();
+  if (b.id === 'backSnacks') VIEWS_MODAL.snacks();
+  if (b.id === 'confirm') VIEWS_MODAL.ticket();
 });
 modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 addEventListener('keydown', (e) => { if (e.key === 'Escape' && !modal.hidden) closeModal(); });
@@ -989,22 +1300,23 @@ addEventListener('keydown', (e) => { if (e.key === 'Escape' && !modal.hidden) cl
 function resize() {
   const w = stage.clientWidth, h = stage.clientHeight;
   if (!w || !h) return;
-  renderer.setPixelRatio(hd ? Math.min(devicePixelRatio, 1.75) : 0.8);
+  const mobile = Math.min(w, h) < 600;
+  renderer.setPixelRatio(hd ? Math.min(devicePixelRatio, mobile ? 1.5 : 1.75) : 0.75);
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
-  camera.fov = w / h < 1 ? 64 : 50;
+  camera.fov = w / h < 1 ? 68 : 55;
   camera.updateProjectionMatrix();
 }
 new ResizeObserver(resize).observe(stage);
 resize();
 
-const lookTmp = new THREE.Vector3();
 let first = true;
 function frame(now) {
-  const t = now / 1000;
-  screenMat.uniforms.uTime.value = t;
-  const cyc = (t % 26) / 26;
-  screenMat.uniforms.uTitleMix.value = THREE.MathUtils.smoothstep(cyc, 0.04, 0.1) * (1 - THREE.MathUtils.smoothstep(cyc, 0.26, 0.32));
+  const tm = now / 1000;
+  screenMat.uniforms.uTime.value = tm;
+  const cyc = (tm % 26) / 26;
+  const useVideo = screenMat.uniforms.uUseVideo.value > 0.5;
+  screenMat.uniforms.uTitleMix.value = useVideo ? 0 : THREE.MathUtils.smoothstep(cyc, 0.04, 0.1) * (1 - THREE.MathUtils.smoothstep(cyc, 0.26, 0.32));
 
   if (fly) {
     const k = Math.min((now - fly.start) / fly.dur, 1), e = ease(k);
@@ -1017,21 +1329,41 @@ function frame(now) {
     controls.target.copy(tourLook.getPointAt(u));
   }
   controls.update();
+  keepTargetInside(controls.target);
+  keepInside(camera.position);
+  camera.lookAt(controls.target);
 
-  // lights
   houseLevel += ((houseOn ? 1 : 0) - houseLevel) * 0.06;
   hemi.intensity = 0.12 + houseLevel * 0.95;
   houseLights.forEach((l) => { l.intensity = 4 + houseLevel * 90; });
   glowMat.color.setRGB(1, 0.77, 0.54).multiplyScalar(0.35 + houseLevel * 0.65);
-  const flash = THREE.MathUtils.smoothstep(Math.sin(t * 0.71) * Math.sin(t * 1.33), 0.97, 1.0);
-  screenLight.intensity = (2.2 + (1 - houseLevel) * 2.5) * (1 - screenMat.uniforms.uTitleMix.value * 0.5) + flash * 6;
-  screenLight.color.setRGB(1, 0.6 + flash * 0.3, 0.38 + flash * 0.5);
+  if (useVideo) {
+    if (now - lastSample > 250 && video.readyState >= 2) {
+      lastSample = now;
+      try {
+        sampleCtx.drawImage(video, 0, 0, 4, 4);
+        const d = sampleCtx.getImageData(0, 0, 4, 4).data; let r = 0, g = 0, b = 0;
+        for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; }
+        videoTint.setRGB(r / 4080, g / 4080, b / 4080);
+      } catch (e) { /* keep last tint */ }
+    }
+    screenLight.color.lerp(videoTint, 0.15);
+    screenLight.intensity = 2.5 + (1 - houseLevel) * 3;
+  } else {
+    const flash = THREE.MathUtils.smoothstep(Math.sin(tm * 0.71) * Math.sin(tm * 1.33), 0.97, 1.0);
+    screenLight.intensity = (2.2 + (1 - houseLevel) * 2.5) * (1 - screenMat.uniforms.uTitleMix.value * 0.5) + flash * 6;
+    screenLight.color.setRGB(1, 0.6 + flash * 0.3, 0.38 + flash * 0.5);
+  }
 
-  // pulse selected seats
   if (picked.length) {
-    const p = 0.5 + 0.5 * Math.sin(t * 5);
+    const p = 0.5 + 0.5 * Math.sin(tm * 5);
     picked.forEach((s) => { s.mesh.setColorAt(s.idx, tmpC.copy(C.pick).lerp(C.white, 0.1 + p * 0.3)); });
     stdMesh.instanceColor.needsUpdate = true; recMesh.instanceColor.needsUpdate = true;
+  }
+  if (rippleStart >= 0) {
+    const k = (now - rippleStart) / 900;
+    if (k >= 1) { ripple.material.opacity = 0; rippleStart = -1; }
+    else { ripple.material.opacity = 1 - k; ripple.scale.setScalar(1 + k * 2.5); }
   }
 
   if (moveQueued && !fly && !tour) {
@@ -1041,19 +1373,18 @@ function frame(now) {
   }
 
   renderer.render(scene, camera);
-  if (first) { first = false; $('#loading').hidden = true; }
+  if (first) { first = false; $('#loading').remove(); }
   requestAnimationFrame(frame);
 }
 
-/* Opening state: a realistic pick so the panel shows how it works */
-quickN = 2;
-{
-  const run = bestBlock(2, 'prime');
-  run?.forEach((s) => { s.selected = true; picked.push(s); });
-  paintAll();
-}
+/* Opening state: a sample pick so the panel shows how it works */
+bestBlock(2, 'prime')?.forEach((s) => { s.selected = true; picked.push(s); });
+paintAll();
 renderPanel();
-setView('overview');
-fly.dur = reduceMotion ? 1 : 2600;
+markView('overview');
+flyTo(...VIEWS.overview, 2.2);
 requestAnimationFrame(frame);
+let seenHelp = false;
+try { seenHelp = localStorage.getItem('lumen-help') === '1'; localStorage.setItem('lumen-help', '1'); } catch (e) {}
+if (!seenHelp) setTimeout(() => { if (modal.hidden) openModal('help'); }, 900);
 </script>
