@@ -1,0 +1,1059 @@
+<title>Lumen 3D Seat Booking</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap">
+<style>
+  /* Layout: one-screen app — 3D auditorium on the left, booking rail on the right; stacks on phones. Single dark "lights down" look by choice. */
+  :root {
+    --bg: #07080d;
+    --surface: #0f121b;
+    --surface-2: #161a27;
+    --line: #242a3c;
+    --fg: #eceef6;
+    --muted: #8a91a9;
+    --accent: #ffc53d;
+    --accent-ink: #1d1402;
+    --pick: #5ff6e8;
+    --booked: #3a3f50;
+    --c-royal: #d9a441;
+    --c-balcony: #9277ff;
+    --c-prime: #35c86b;
+    --c-classic: #3d82f2;
+    --danger: #ff6b6b;
+    --display: "Unbounded", "Arial Black", system-ui, sans-serif;
+    --body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--body);
+    font-size: 14px;
+    line-height: 1.45;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 12px;
+    overflow: hidden;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--pick); outline-offset: 2px; }
+
+  .app { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 12px; }
+
+  /* Header */
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .film { display: flex; align-items: center; gap: 14px; min-width: 0; }
+  .cert { font-family: var(--mono); font-size: 11px; border: 1px solid var(--line); border-radius: 4px; padding: 2px 6px; color: var(--muted); }
+  .film h1 { margin: 0; font-family: var(--display); font-weight: 700; font-size: 20px; letter-spacing: 0.08em; text-transform: uppercase; line-height: 1.1; }
+  .film h1 span { font-weight: 500; font-size: 12px; letter-spacing: 0.14em; color: var(--muted); margin-left: 8px; }
+  .meta { margin: 3px 0 0; color: var(--muted); font-size: 12.5px; }
+  .steps { display: flex; gap: 6px; list-style: none; margin: 0; padding: 0; font-size: 12px; color: var(--muted); }
+  .steps li { display: flex; align-items: center; gap: 6px; }
+  .steps li + li::before { content: ""; width: 18px; height: 1px; background: var(--line); }
+  .steps li[aria-current="step"] { color: var(--fg); font-weight: 600; }
+  .steps b { font-family: var(--mono); font-weight: 600; font-size: 11px; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--line); }
+  .steps li[aria-current="step"] b { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 12px; min-height: 0; }
+
+  /* Stage */
+  .stage { position: relative; min-height: 0; border-radius: 16px; overflow: hidden; background: #030407; border: 1px solid var(--line); }
+  .stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+  .views { position: absolute; top: 12px; left: 12px; right: 12px; display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; pointer-events: none; }
+  .views-inner { display: flex; gap: 4px; padding: 4px; background: rgba(10, 12, 20, 0.72); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.08); border-radius: 999px; pointer-events: auto; }
+  .views button { border: 0; background: transparent; padding: 6px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 500; color: var(--muted); white-space: nowrap; }
+  .views button:hover { color: var(--fg); }
+  .views button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+  .views .tour { color: var(--accent); }
+  .views .tour[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+
+  .hint { position: absolute; left: 14px; bottom: 12px; font-size: 12px; color: var(--muted); background: rgba(10,12,20,0.6); padding: 6px 10px; border-radius: 8px; pointer-events: none; }
+  .toggles { position: absolute; right: 12px; bottom: 12px; display: flex; gap: 6px; }
+  .toggles button { border: 1px solid rgba(255,255,255,0.12); background: rgba(10,12,20,0.72); backdrop-filter: blur(8px); padding: 6px 12px; border-radius: 999px; font-size: 12px; color: var(--muted); }
+  .toggles button[aria-pressed="true"] { color: var(--fg); border-color: rgba(255,255,255,0.35); }
+  .seatview-tag { position: absolute; top: 58px; left: 50%; transform: translateX(-50%); background: rgba(10,12,20,0.78); border: 1px solid var(--pick); color: var(--pick); font-family: var(--mono); font-size: 12px; padding: 5px 12px; border-radius: 999px; pointer-events: none; white-space: nowrap; }
+
+  .tip { position: absolute; pointer-events: none; background: rgba(12, 14, 22, 0.92); border: 1px solid rgba(255,255,255,0.14); border-radius: 10px; padding: 7px 10px; font-size: 12px; transform: translate(-50%, calc(-100% - 14px)); white-space: nowrap; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+  .tip b { font-family: var(--mono); font-weight: 600; display: block; font-size: 12.5px; }
+  .tip span { color: var(--muted); }
+  .tip.is-booked b { color: var(--danger); }
+  .tip.is-picked b { color: var(--pick); }
+
+  .loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 13px; text-align: center; padding: 24px; }
+
+  /* Panel */
+  .panel { min-height: 0; overflow-y: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; display: flex; flex-direction: column; }
+  .panel section { padding: 16px 16px 4px; display: grid; gap: 10px; }
+  .eyebrow { margin: 0; font-family: var(--display); font-weight: 500; font-size: 10.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
+  .class-list { display: grid; gap: 6px; }
+  .class-card { display: grid; grid-template-columns: 4px minmax(0, 1fr) auto; gap: 12px; align-items: center; text-align: left; padding: 10px 12px 10px 10px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface-2); transition: border-color 0.15s, background 0.15s; }
+  .class-card:hover { border-color: #39405a; }
+  .class-card[aria-pressed="true"] { border-color: var(--cc); background: color-mix(in srgb, var(--cc) 10%, var(--surface-2)); }
+  .class-card .bar { width: 4px; height: 32px; border-radius: 4px; background: var(--cc); }
+  .class-card strong { display: block; font-size: 14px; font-weight: 600; }
+  .class-card small { display: block; color: var(--muted); font-size: 12px; }
+  .class-card .price { text-align: right; font-family: var(--mono); }
+  .class-card .price strong { font-size: 14px; }
+  .class-card .price small { font-size: 11px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); margin: 2px 0 0; padding: 0; list-style: none; }
+  .legend li { display: flex; align-items: center; gap: 6px; }
+  .legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
+  .quick { display: flex; gap: 8px; align-items: center; }
+  .stepper { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-2); }
+  .stepper button { width: 34px; height: 34px; border: 0; background: transparent; font-size: 18px; color: var(--muted); border-radius: 50%; }
+  .stepper button:hover { color: var(--fg); }
+  .stepper output { width: 22px; text-align: center; font-family: var(--mono); font-weight: 600; }
+  .best { flex: 1; height: 36px; border-radius: 999px; border: 0; background: var(--fg); color: var(--bg); font-weight: 600; }
+  .best:hover { background: #ffffff; }
+  .small { font-size: 12px; color: var(--muted); margin: 0; }
+
+  .row-head { display: flex; justify-content: space-between; align-items: center; }
+  .link { border: 0; background: none; color: var(--muted); font-size: 12px; text-decoration: underline; text-underline-offset: 3px; padding: 2px 0; }
+  .link:hover { color: var(--fg); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { display: inline-flex; align-items: center; border-radius: 999px; background: color-mix(in srgb, var(--cc) 16%, var(--surface-2)); border: 1px solid color-mix(in srgb, var(--cc) 55%, transparent); font-family: var(--mono); font-size: 12px; }
+  .chip button { border: 0; background: none; padding: 5px 4px 5px 10px; display: inline-flex; align-items: center; gap: 6px; }
+  .chip button i { width: 7px; height: 7px; border-radius: 50%; background: var(--cc); }
+  .chip .x { padding: 5px 10px 5px 4px; color: var(--muted); font-size: 14px; line-height: 1; }
+  .chip .x:hover { color: var(--fg); }
+  .empty { margin: 0; color: var(--muted); font-size: 12.5px; border: 1px dashed var(--line); border-radius: 12px; padding: 12px; }
+
+  .checkout { margin-top: auto; position: sticky; bottom: 0; padding: 14px 16px 16px; background: linear-gradient(to top, var(--surface) 75%, transparent); display: grid; grid-template-columns: 1fr auto; gap: 10px 12px; align-items: end; }
+  .checkout .lines { font-size: 12px; color: var(--muted); }
+  .checkout .lines b { color: var(--fg); font-weight: 600; }
+  .total { font-family: var(--display); font-weight: 700; font-size: 26px; font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+  .cta { grid-column: 1 / -1; height: 48px; border: 0; border-radius: 12px; background: var(--accent); color: var(--accent-ink); font-family: var(--display); font-weight: 500; font-size: 12.5px; letter-spacing: 0.14em; text-transform: uppercase; }
+  .cta:hover { filter: brightness(1.06); }
+  .cta:disabled { background: var(--surface-2); color: var(--muted); cursor: not-allowed; filter: none; }
+
+  /* Toast */
+  .toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-size: 13px; font-weight: 500; box-shadow: 0 10px 30px rgba(0,0,0,0.5); z-index: 40; max-width: calc(100% - 32px); text-align: center; }
+
+  /* Modal */
+  .modal { position: fixed; inset: 0; background: rgba(3, 4, 8, 0.72); backdrop-filter: blur(6px); display: grid; place-items: center; z-index: 30; padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+  .sheet { width: min(480px, 100%); max-height: 100%; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 20px; display: grid; gap: 16px; }
+  .sheet h2 { margin: 0; font-family: var(--display); font-weight: 700; font-size: 18px; letter-spacing: 0.04em; text-wrap: balance; }
+  .sheet .sub { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+  .snacks { display: grid; gap: 8px; }
+  .snack { display: grid; grid-template-columns: 40px minmax(0,1fr) auto; gap: 12px; align-items: center; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+  .snack .art { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; font-family: var(--display); font-size: 11px; font-weight: 700; color: var(--accent-ink); }
+  .snack strong { display: block; font-size: 14px; font-weight: 600; }
+  .snack small { color: var(--muted); font-size: 12px; font-family: var(--mono); }
+  .lines-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .lines-table td { padding: 7px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .lines-table td:last-child { text-align: right; font-family: var(--mono); white-space: nowrap; padding-left: 12px; }
+  .lines-table tr.total-row td { border-bottom: 0; font-weight: 700; font-size: 15px; padding-top: 12px; }
+  .lines-table .muted { color: var(--muted); font-size: 12px; display: block; font-family: var(--mono); }
+  .sheet-actions { display: flex; gap: 8px; }
+  .sheet-actions .cta { flex: 1; }
+  .ghost { height: 48px; padding: 0 18px; border-radius: 12px; border: 1px solid var(--line); background: transparent; color: var(--fg); font-weight: 600; }
+  .ghost:hover { border-color: #3a4058; }
+  .demo-note { margin: 0; font-size: 12px; color: var(--muted); text-align: center; }
+
+  .ticket { border-radius: 16px; overflow: hidden; background: var(--fg); color: #10121a; }
+  .ticket-top { padding: 18px; display: grid; gap: 4px; background: linear-gradient(135deg, #2a1640, #6b2a1c 60%, #c86a2a); color: #fff; }
+  .ticket-top .t-title { font-family: var(--display); font-weight: 700; letter-spacing: 0.1em; font-size: 20px; }
+  .ticket-top small { opacity: 0.85; font-size: 12px; }
+  .ticket-body { padding: 16px 18px; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 14px; align-items: center; border-top: 2px dashed #c9ccd8; }
+  .ticket-body dl { margin: 0; display: grid; grid-template-columns: auto minmax(0,1fr); gap: 4px 12px; font-size: 12.5px; }
+  .ticket-body dt { color: #6b7086; }
+  .ticket-body dd { margin: 0; font-family: var(--mono); font-weight: 600; overflow-wrap: anywhere; }
+  .ticket canvas { width: 92px; height: 92px; image-rendering: pixelated; }
+
+  @media (max-width: 900px) {
+    html, body { height: auto; }
+    body { overflow: auto; }
+    .app { height: auto; }
+    main { grid-template-columns: minmax(0, 1fr); }
+    .stage { height: 62svh; min-height: 360px; }
+    .panel { overflow: visible; }
+    .steps { display: none; }
+  }
+  @media (max-width: 560px) {
+    .hint { display: none; }
+    .film h1 { font-size: 17px; }
+    .film h1 span { display: block; margin: 2px 0 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+
+<div class="app">
+  <header class="top">
+    <div class="film">
+      <div>
+        <h1>Kaalam <span>The Last Monsoon</span></h1>
+        <p class="meta">Lumen Talkies, Anna Nagar · Sat 31 Oct · 10:40 PM · Dolby Atmos · Tamil · <span class="cert">U/A 13+</span></p>
+      </div>
+    </div>
+    <ol class="steps" aria-label="Booking steps">
+      <li aria-current="step" id="step1"><b>1</b>Seats</li>
+      <li id="step2"><b>2</b>Snacks</li>
+      <li id="step3"><b>3</b>Confirm</li>
+    </ol>
+  </header>
+
+  <main>
+    <div class="stage" id="stage">
+      <div class="loading" id="loading">Setting up the auditorium…</div>
+      <div class="views"><div class="views-inner" role="group" aria-label="Camera views">
+        <button type="button" data-view="overview" aria-pressed="true">Overview</button>
+        <button type="button" data-view="stage" aria-pressed="false">From stage</button>
+        <button type="button" data-view="balcony" aria-pressed="false">Balcony</button>
+        <button type="button" data-view="bird" aria-pressed="false">Bird's eye</button>
+        <button type="button" class="tour" id="tourBtn" aria-pressed="false">▶ Tour</button>
+      </div></div>
+      <div class="seatview-tag" id="seatTag" hidden></div>
+      <div class="tip" id="tip" hidden></div>
+      <div class="hint">Drag to orbit · scroll to zoom · double-click a seat for its view · up to 10 seats at a time</div>
+      <div class="toggles">
+        <button type="button" id="lightsBtn" aria-pressed="true">House lights</button>
+        <button type="button" id="hdBtn" aria-pressed="true">HD</button>
+      </div>
+    </div>
+
+    <aside class="panel" aria-label="Booking">
+      <section>
+        <h2 class="eyebrow">Seat classes</h2>
+        <div class="class-list" id="classList"></div>
+        <ul class="legend">
+          <li><i style="background: var(--booked)"></i>Booked</li>
+          <li><i style="background: var(--pick)"></i>Your pick</li>
+          <li><i style="background: var(--c-royal)"></i>Recliners sold in pairs</li>
+        </ul>
+      </section>
+      <section>
+        <h2 class="eyebrow">Quick pick</h2>
+        <div class="quick">
+          <div class="stepper">
+            <button type="button" id="qMinus" aria-label="Fewer seats">−</button>
+            <output id="qCount" aria-live="polite">2</output>
+            <button type="button" id="qPlus" aria-label="More seats">+</button>
+          </div>
+          <button type="button" class="best" id="bestBtn">Best 2 seats</button>
+        </div>
+        <p class="small" id="quickHint"></p>
+      </section>
+      <section>
+        <div class="row-head">
+          <h2 class="eyebrow">Your seats</h2>
+          <button type="button" class="link" id="clearBtn">Clear</button>
+        </div>
+        <div class="chips" id="chips"></div>
+        <p class="empty" id="emptySeats" hidden>Tap a seat in the hall, or use Quick pick to grab the best block together.</p>
+      </section>
+      <div class="checkout">
+        <div class="lines"><b id="ticketLine">0 tickets</b><br><span id="feeLine">+ fees ₹0</span></div>
+        <div class="total" id="total">₹0</div>
+        <button type="button" class="cta" id="continueBtn">Continue · Add snacks</button>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<div class="toast" id="toast" role="status" hidden></div>
+<div class="modal" id="modal" hidden><div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle"></div></div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
+
+const $ = (s) => document.querySelector(s);
+const inr = (v) => '₹' + Math.round(v).toLocaleString('en-IN');
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------------- Data ---------------- */
+const CLASSES = {
+  royal:   { name: 'Royal Recliner', desc: 'Motorised recliners · food to seat', price: 550, color: '#d9a441' },
+  balcony: { name: 'Balcony', desc: 'Elevated view · centre aligned', price: 320, color: '#9277ff' },
+  prime:   { name: 'Prime', desc: 'Sweet spot for sound & picture', price: 240, color: '#35c86b' },
+  classic: { name: 'Classic', desc: 'Front rows · big-screen energy', price: 160, color: '#3d82f2' },
+};
+const CLASS_ORDER = ['royal', 'balcony', 'prime', 'classic'];
+const BEST_FALLBACK = ['prime', 'balcony', 'royal', 'classic'];
+const MAX_SEATS = 10, FEE = 17.6;
+const CZ = -34;              // centre of the row arcs (behind the screen)
+const W = 13.45;             // half room width
+const SCREEN_Z = -15.1, SCREEN_Y = 6.2;
+const BALCONY_FRONT_R = 8.4 - CZ;
+const BACK_WALL_Z = 15.5;
+
+const ROW_SPECS = [];
+'ABCDEFGHIJK'.split('').forEach((L, i) => ROW_SPECS.push({
+  letter: L, cls: i < 3 ? 'classic' : 'prime', z: -8.2 + i * 1.15, y: 0.12 + i * 0.26,
+  blocks: i < 3 ? [4, 12, 4] : [5, 14, 5], pitch: 0.68, kind: 'std', idx: i,
+}));
+ROW_SPECS.push({ letter: 'L', cls: 'royal', z: 4.85, y: 3.15, blocks: [4, 8, 4], pitch: 1.1, kind: 'rec', pair: true });
+ROW_SPECS.push({ letter: 'M', cls: 'royal', z: 6.65, y: 3.6, blocks: [4, 8, 4], pitch: 1.1, kind: 'rec', pair: true });
+'NOPQ'.split('').forEach((L, i) => ROW_SPECS.push({
+  letter: L, cls: 'balcony', z: 9.7 + i * 1.2, y: 6.25 + i * 0.4, blocks: [6, 14, 6], pitch: 0.68, kind: 'std', balcony: true,
+}));
+
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const rng = mulberry32(31102026);
+
+const rows = [];
+const seats = [];
+const seatById = new Map();
+for (const spec of ROW_SPECS) {
+  const R = spec.z - CZ;
+  const blocks = [], gaps = [], items = [];
+  let s = 0, num = 0;
+  spec.blocks.forEach((n, bi) => {
+    const block = [];
+    if (bi > 0) { const g0 = s; s += spec.pitch + 0.9 + (spec.pair ? 0.2 : 0); gaps.push((g0 + s) / 2); }
+    for (let k = 0; k < n; k++) {
+      if (k > 0) s += spec.pair ? (k % 2 ? 1.04 : 1.26) : spec.pitch;
+      num++;
+      const seat = { row: spec.letter, num, id: spec.letter + num, cls: spec.cls, kind: spec.kind, s, block: bi, k, booked: false, selected: false };
+      block.push(seat); items.push(seat);
+    }
+    blocks.push(block);
+  });
+  const half = s / 2;
+  for (const seat of items) {
+    seat.s -= half;
+    seat.theta = seat.s / R;
+    seat.pos = new THREE.Vector3(R * Math.sin(seat.theta), spec.y, CZ + R * Math.cos(seat.theta));
+    seat.rowRef = spec;
+    seats.push(seat); seatById.set(seat.id, seat);
+  }
+  if (spec.pair) for (const b of blocks) for (let k = 0; k < b.length; k += 2) { b[k].partner = b[k + 1]; b[k + 1].partner = b[k]; }
+  // occupancy: busier in the centre
+  for (const b of blocks) for (const seat of b) {
+    if (spec.pair && seat.k % 2) continue;
+    const central = 1 - Math.abs(seat.s) / (half + 0.01);
+    const p = 0.14 + 0.36 * central + (spec.cls === 'prime' ? 0.08 : 0);
+    if (rng() < p) { seat.booked = true; if (seat.partner) seat.partner.booked = true; }
+  }
+  rows.push({ ...spec, R, blocks, gaps: gaps.map((g) => g - half), half, seats: items });
+}
+rows.forEach((r, i) => { r.order = i; });
+
+/* ---------------- State ---------------- */
+let picked = [];            // seats in pick order
+let activeClass = null;     // filter
+let quickN = 2;
+let hovered = null;
+let houseOn = true, houseLevel = 1;
+let hd = true;
+let currentView = 'overview';
+
+/* ---------------- Three setup ---------------- */
+const stage = $('#stage');
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+} catch (e) {
+  $('#loading').textContent = 'This device could not start 3D graphics (WebGL). Try a recent Chrome, Edge, Safari or Firefox.';
+  throw e;
+}
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
+stage.prepend(renderer.domElement);
+renderer.domElement.setAttribute('aria-label', '3D view of the auditorium. Use Quick pick in the panel to choose seats with the keyboard.');
+renderer.domElement.setAttribute('role', 'img');
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#030407');
+scene.fog = new THREE.Fog('#030407', 60, 110);
+const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 200);
+camera.position.set(24, 30, 40);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 1.5;
+controls.maxDistance = 70;
+controls.target.set(0, 3, -2);
+
+RectAreaLightUniformsLib.init();
+
+/* Textures */
+function canvasTex(w, h, draw, repeat) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 8;
+  if (repeat) t.repeat.set(repeat[0], repeat[1]);
+  return t;
+}
+const texRng = mulberry32(7);
+const woodTex = canvasTex(512, 512, (g, w, h) => {
+  g.fillStyle = '#140904'; g.fillRect(0, 0, w, h);
+  const n = 6, sw = w / n;
+  for (let i = 0; i < n; i++) {
+    const x = i * sw;
+    const grad = g.createLinearGradient(x, 0, x + sw, 0);
+    grad.addColorStop(0, '#4a2412'); grad.addColorStop(0.45, '#7b4120'); grad.addColorStop(1, '#3e1d0d');
+    g.fillStyle = grad; g.fillRect(x + 4, 0, sw - 8, h);
+    g.globalAlpha = 0.14;
+    for (let k = 0; k < 18; k++) { g.fillStyle = k % 2 ? '#1d0d05' : '#b06a35'; g.fillRect(x + 6 + texRng() * (sw - 12), 0, 1 + texRng() * 2, h); }
+    g.globalAlpha = 1;
+  }
+  g.fillStyle = '#0b0502'; g.fillRect(0, h / 2 - 3, w, 6);
+}, [10, 2]);
+const carpetDraw = (g, w, h) => {
+  g.fillStyle = '#3c1610'; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 1400; i++) { g.fillStyle = texRng() > 0.5 ? 'rgba(90,30,20,0.5)' : 'rgba(20,6,4,0.5)'; g.fillRect(texRng() * w, texRng() * h, 2, 2); }
+  g.strokeStyle = 'rgba(160,80,40,0.18)'; g.lineWidth = 2;
+  for (let x = 0; x < w; x += w / 4) for (let y = 0; y < h; y += h / 4) { g.beginPath(); g.moveTo(x + w / 8, y); g.lineTo(x + w / 4, y + h / 8); g.lineTo(x + w / 8, y + h / 4); g.lineTo(x, y + h / 8); g.closePath(); g.stroke(); }
+};
+const carpetTex = canvasTex(256, 256, carpetDraw, [0.5, 0.5]);
+const floorTex = canvasTex(256, 256, carpetDraw, [14, 16]);
+
+const carpetMat = new THREE.MeshStandardMaterial({ map: carpetTex, roughness: 0.95 });
+const riserMat = new THREE.MeshStandardMaterial({ color: '#2a130a', roughness: 0.7 });
+const wallMat = new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.6 });
+const darkMat = new THREE.MeshStandardMaterial({ color: '#0b0b10', roughness: 0.9 });
+
+/* Room shell (single-sided planes so outside views see in, like a dollhouse) */
+const DEPTH = BACK_WALL_Z + 16, MIDZ = (BACK_WALL_Z - 16) / 2, H = 14;
+function plane(w, h, mat, pos, rot) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+  m.position.copy(pos); m.rotation.set(rot[0], rot[1], rot[2]); scene.add(m); return m;
+}
+plane(DEPTH, H, wallMat, new THREE.Vector3(-W - 0.05, H / 2, MIDZ), [0, Math.PI / 2, 0]);
+plane(DEPTH, H, wallMat, new THREE.Vector3(W + 0.05, H / 2, MIDZ), [0, -Math.PI / 2, 0]);
+const backWoodTex = woodTex.clone(); backWoodTex.repeat.set(9, 2); backWoodTex.needsUpdate = true;
+plane(2 * W + 0.1, H, new THREE.MeshStandardMaterial({ map: backWoodTex, roughness: 0.6 }), new THREE.Vector3(0, H / 2, BACK_WALL_Z), [0, Math.PI, 0]);
+plane(2 * W + 0.1, H, darkMat, new THREE.Vector3(0, H / 2, -16), [0, 0, 0]);
+plane(2 * W + 0.1, DEPTH, new THREE.MeshStandardMaterial({ color: '#0d0e14', roughness: 1 }), new THREE.Vector3(0, H, MIDZ), [Math.PI / 2, 0, 0]);
+plane(2 * W + 0.1, DEPTH, new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.95 }), new THREE.Vector3(0, 0, MIDZ), [-Math.PI / 2, 0, 0]);
+
+/* Curved, stepped tiers */
+const zArc = (R) => (x) => CZ + Math.sqrt(Math.max(R * R - x * x, 0));
+const zFlat = (z) => () => z;
+function tier(front, back, y0, y1, mats = [carpetMat, riserMat]) {
+  const N = 56, pts = [];
+  for (let i = 0; i <= N; i++) { const x = -W + (2 * W * i) / N; pts.push(new THREE.Vector2(x, -front(x))); }
+  for (let i = N; i >= 0; i--) { const x = -W + (2 * W * i) / N; pts.push(new THREE.Vector2(x, -Math.max(back(x), front(x) + 0.01))); }
+  const g = new THREE.ExtrudeGeometry(new THREE.Shape(pts), { depth: Math.max(y1 - y0, 0.01), bevelEnabled: false, curveSegments: 1 });
+  g.rotateX(-Math.PI / 2); g.translate(0, y0, 0);
+  const m = new THREE.Mesh(g, mats); scene.add(m); return m;
+}
+const mainRows = rows.filter((r) => !r.balcony);
+const balcRows = rows.filter((r) => r.balcony);
+mainRows.forEach((r, i) => {
+  const prev = mainRows[i - 1], next = mainRows[i + 1];
+  r.frontR = prev ? (prev.R + r.R) / 2 : r.R - 0.75;
+  const backR = next ? (r.R + next.R) / 2 : BALCONY_FRONT_R;
+  tier(zArc(r.frontR), zArc(backR), 0, r.y);
+});
+// balcony base block + parapet
+tier(zArc(BALCONY_FRONT_R), zFlat(BACK_WALL_Z), 0, 6.0, [carpetMat, new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.6 })]);
+const parapetMat = new THREE.MeshStandardMaterial({ color: '#1a0c06', roughness: 0.5 });
+tier(zArc(BALCONY_FRONT_R), zArc(BALCONY_FRONT_R + 0.3), 6.0, 7.0, [parapetMat, parapetMat]);
+balcRows.forEach((r, i) => {
+  const prev = balcRows[i - 1], next = balcRows[i + 1];
+  r.frontR = prev ? (prev.R + r.R) / 2 : BALCONY_FRONT_R + 0.3;
+  tier(zArc(r.frontR), next ? zArc((r.R + next.R) / 2) : zFlat(BACK_WALL_Z), 6.0, r.y);
+});
+// glowing strip along the parapet
+{
+  const pts = []; const R = BALCONY_FRONT_R + 0.02;
+  for (let i = 0; i <= 64; i++) { const x = -W + (2 * W * i) / 64; pts.push(new THREE.Vector3(x, 7.0, zArc(R)(x))); }
+  const g = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 128, 0.025, 6, false);
+  scene.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: '#ffb066' })));
+}
+
+/* Aisle step lights */
+{
+  const pos = [];
+  for (const r of rows) for (const g of r.gaps) {
+    const R = r.frontR; const th = g / r.R;
+    pos.push([R * Math.sin(th), r.y - 0.06, CZ + R * Math.cos(th), th]);
+  }
+  const m = new THREE.InstancedMesh(new THREE.BoxGeometry(0.34, 0.035, 0.03), new THREE.MeshBasicMaterial({ color: '#ffcf8a' }), pos.length);
+  const o = new THREE.Object3D();
+  pos.forEach((p, i) => { o.position.set(p[0], p[1], p[2] - 0.02); o.rotation.set(0, p[3], 0); o.updateMatrix(); m.setMatrixAt(i, o.matrix); });
+  scene.add(m);
+}
+
+/* Screen */
+const titleCanvas = document.createElement('canvas'); titleCanvas.width = 1024; titleCanvas.height = 436;
+const titleTex = new THREE.CanvasTexture(titleCanvas);
+function drawTitle() {
+  const g = titleCanvas.getContext('2d');
+  g.clearRect(0, 0, 1024, 436);
+  g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.font = '700 118px Unbounded, "Arial Black", sans-serif';
+  g.fillText('KAALAM', 512, 196);
+  g.font = '500 26px Unbounded, Arial, sans-serif';
+  g.fillText('T H E   L A S T   M O N S O O N', 512, 286);
+  titleTex.needsUpdate = true;
+}
+drawTitle();
+document.fonts?.ready.then(drawTitle);
+const screenMat = new THREE.ShaderMaterial({
+  uniforms: { uTime: { value: 0 }, uTitle: { value: titleTex }, uTitleMix: { value: 0 } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+  fragmentShader: `
+    varying vec2 vUv; uniform float uTime; uniform sampler2D uTitle; uniform float uTitleMix;
+    float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+    float noise(vec2 p){ vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.0-2.0*f);
+      return mix(mix(hash(i),hash(i+vec2(1,0)),u.x), mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),u.x), u.y); }
+    float fbm(vec2 p){ float v=0.0, a=0.5; for(int i=0;i<5;i++){ v+=a*noise(p); p*=2.03; a*=0.5; } return v; }
+    void main(){
+      vec2 uv = vUv; float T = uTime;
+      vec3 low = vec3(1.0,0.70,0.38), mid = vec3(0.86,0.36,0.22), top = vec3(0.10,0.06,0.20);
+      vec3 col = mix(low, mid, smoothstep(0.28,0.55,uv.y));
+      col = mix(col, top, smoothstep(0.5,1.0,uv.y));
+      vec2 sp = vec2(0.62 + 0.03*sin(T*0.03), 0.36);
+      float d = length((uv-sp)*vec2(2.35,1.0));
+      col += vec3(1.0,0.78,0.5)*smoothstep(0.085,0.07,d) + vec3(1.0,0.5,0.25)*exp(-d*6.0)*0.45;
+      float c = fbm(vec2(uv.x*3.0 + T*0.025, uv.y*5.0 - T*0.01));
+      float cloud = smoothstep(0.42,0.78,c) * smoothstep(0.33,0.7,uv.y);
+      col = mix(col, vec3(0.15,0.09,0.17), cloud*0.85);
+      // hills
+      float hl = 0.30 + 0.16*smoothstep(0.5,0.0,uv.x)*(0.6+0.5*fbm(vec2(uv.x*5.0,2.0))) + 0.03*fbm(vec2(uv.x*14.0,5.0));
+      // sea
+      vec3 seaCol = mix(vec3(0.04,0.03,0.08), vec3(0.62,0.30,0.20), smoothstep(0.0,0.3,uv.y));
+      float sh = noise(vec2(uv.x*90.0, uv.y*320.0 - T*0.8)) * smoothstep(0.14,0.0,abs(uv.x-sp.x));
+      seaCol += vec3(1.0,0.7,0.4)*sh*0.7*smoothstep(0.0,0.3,uv.y);
+      col = mix(col, seaCol, step(uv.y, 0.30));
+      col = mix(col, vec3(0.035,0.025,0.05), step(uv.y, hl)*step(0.29, uv.y));
+      // rain
+      float cx = floor(uv.x*260.0);
+      float rn = step(0.975, hash(vec2(cx, floor(uv.y*10.0 + T*7.0 + hash(vec2(cx,3.0))*10.0))));
+      col += rn*0.12;
+      // lightning
+      float fl = smoothstep(0.97,1.0, sin(T*0.71)*sin(T*1.33));
+      col += fl*vec3(0.55,0.6,0.9)*0.7*uv.y;
+      // title card
+      vec4 tt = texture2D(uTitle, uv);
+      col = mix(col, col*0.3, uTitleMix*0.7);
+      col = mix(col, vec3(1.0,0.95,0.88), tt.a*uTitleMix);
+      col *= 0.72 + 0.28*smoothstep(0.95,0.25,length(uv-0.5));
+      gl_FragColor = vec4(col,1.0);
+    }`,
+  toneMapped: false,
+});
+{
+  const g = new THREE.PlaneGeometry(20, 8.5, 40, 1);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) { const x = p.getX(i); p.setZ(i, (x / 10) * (x / 10) * 0.7); }
+  const screen = new THREE.Mesh(g, screenMat);
+  screen.position.set(0, SCREEN_Y, SCREEN_Z);
+  scene.add(screen);
+  const mask = new THREE.Mesh(new THREE.PlaneGeometry(21.6, 9.8), new THREE.MeshBasicMaterial({ color: '#000' }));
+  mask.position.set(0, SCREEN_Y, SCREEN_Z - 0.05); scene.add(mask);
+  // stage platform
+  const stageBox = new THREE.Mesh(new THREE.BoxGeometry(26.9, 0.8, 2.6), new THREE.MeshStandardMaterial({ color: '#1c0e07', roughness: 0.55 }));
+  stageBox.position.set(0, 0.4, -14.7); scene.add(stageBox);
+  const strip = new THREE.Mesh(new THREE.BoxGeometry(26.9, 0.04, 0.04), new THREE.MeshBasicMaterial({ color: '#ff9a4d' }));
+  strip.position.set(0, 0.78, -13.38); scene.add(strip);
+}
+/* Curtains */
+function curtain(w, h, folds) {
+  const g = new THREE.PlaneGeometry(w, h, folds * 8, 1);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) { const x = p.getX(i); p.setZ(i, 0.22 * Math.sin((x / w) * Math.PI * 2 * folds)); }
+  g.computeVertexNormals();
+  return g;
+}
+const curtainMat = new THREE.MeshStandardMaterial({ color: '#7d0f16', roughness: 0.75, side: THREE.DoubleSide });
+for (const sx of [-1, 1]) {
+  const c = new THREE.Mesh(curtain(3.2, 12.6, 7), curtainMat);
+  c.position.set(sx * 11.85, 6.3, -15.35); scene.add(c);
+}
+{
+  const v = new THREE.Mesh(curtain(27, 2.2, 26), curtainMat);
+  v.position.set(0, 12.6, -15.3); scene.add(v);
+}
+
+/* Wall sconces, ceiling dots, exit signs */
+const glowMat = new THREE.MeshBasicMaterial({ color: '#ffc58a' });
+{
+  const zs = [-10, -4.5, 1, 6.5, 12];
+  const m = new THREE.InstancedMesh(new THREE.BoxGeometry(0.12, 1.1, 0.28), glowMat, zs.length * 2);
+  const o = new THREE.Object3D(); let i = 0;
+  for (const sx of [-1, 1]) for (const z of zs) { o.position.set(sx * (W - 0.06), 4.6, z); o.updateMatrix(); m.setMatrixAt(i++, o.matrix); }
+  scene.add(m);
+  const dots = [];
+  for (let x = -11; x <= 11; x += 2.75) for (let z = -12; z <= 14; z += 2.6) dots.push([x + (Math.abs(z) % 2) * 0.6, z]);
+  const dm = new THREE.InstancedMesh(new THREE.CircleGeometry(0.07, 10), new THREE.MeshBasicMaterial({ color: '#fff1d6' }), dots.length);
+  dots.forEach(([x, z], k) => { o.position.set(x, H - 0.02, z); o.rotation.set(Math.PI / 2, 0, 0); o.updateMatrix(); dm.setMatrixAt(k, o.matrix); });
+  scene.add(dm);
+}
+function textSprite(text, { color = '#cfd3e2', size = 0.5, font = '600 80px "JetBrains Mono", monospace', w = 128, h = 128, bg = null } = {}) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  if (bg) { g.fillStyle = bg; g.fillRect(0, 0, w, h); }
+  g.fillStyle = color; g.font = font; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, w / 2, h / 2 + 4);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false, toneMapped: false }));
+  s.scale.set(size * (w / h), size, 1);
+  return s;
+}
+for (const [x, z, ry] of [[-W + 0.03, -11.5, Math.PI / 2], [W - 0.03, -11.5, -Math.PI / 2], [-W + 0.03, 3.8, Math.PI / 2], [W - 0.03, 3.8, -Math.PI / 2]]) {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 96;
+  const g = c.getContext('2d'); g.fillStyle = '#0d7a3a'; g.fillRect(0, 0, 256, 96);
+  g.fillStyle = '#e9fff1'; g.font = '700 54px Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('EXIT', 128, 50);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.42), new THREE.MeshBasicMaterial({ map: t, toneMapped: false }));
+  m.position.set(x, 3.4, z); m.rotation.y = ry; scene.add(m);
+  const door = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 2.8), new THREE.MeshStandardMaterial({ color: '#0e0a08', roughness: 0.8 }));
+  door.position.set(x + Math.sign(-x) * 0.01, 1.4 + (z > 0 ? 3.0 : 0), z); door.rotation.y = ry; scene.add(door);
+}
+// Row letters at both ends
+for (const r of rows) {
+  for (const side of [-1, 1]) {
+    const s = side * (r.half + (r.pair ? 1.0 : 0.75));
+    const th = s / r.R;
+    const sp = textSprite(r.letter, { size: 0.42, color: '#aab0c6' });
+    sp.position.set(r.R * Math.sin(th), r.y + 0.75, CZ + r.R * Math.cos(th));
+    scene.add(sp);
+  }
+}
+
+/* Lights */
+const hemi = new THREE.HemisphereLight('#ffe2c4', '#2a1410', 1.0);
+scene.add(hemi);
+const houseLights = [];
+for (const [x, z] of [[-7, -7], [7, -7], [-7, 7], [7, 7]]) {
+  const l = new THREE.PointLight('#ffc890', 90, 0, 2); l.position.set(x, 12.5, z); scene.add(l); houseLights.push(l);
+}
+const screenLight = new THREE.RectAreaLight('#ff9a5c', 3, 20, 8.5);
+screenLight.position.set(0, SCREEN_Y, SCREEN_Z + 0.3);
+screenLight.lookAt(0, SCREEN_Y, 10);
+scene.add(screenLight);
+
+/* ---------------- Seats ---------------- */
+function part(geo, shade, x, y, z, rx = 0) {
+  geo = geo.index ? geo.toNonIndexed() : geo;
+  geo.deleteAttribute('uv');
+  geo.rotateX(rx); geo.translate(x, y, z);
+  const n = geo.attributes.position.count;
+  geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3).fill(shade), 3));
+  return geo;
+}
+const RB = (w, h, d, r) => new RoundedBoxGeometry(w, h, d, 2, r);
+const stdGeo = mergeGeometries([
+  part(new THREE.BoxGeometry(0.34, 0.34, 0.3), 0.22, 0, 0.17, 0.05),
+  part(RB(0.54, 0.15, 0.5, 0.05), 1.0, 0, 0.42, -0.02),
+  part(RB(0.54, 0.7, 0.12, 0.05), 0.88, 0, 0.82, 0.27, 0.14),
+  part(new THREE.BoxGeometry(0.06, 0.07, 0.46), 0.42, -0.31, 0.62, 0.02),
+  part(new THREE.BoxGeometry(0.06, 0.07, 0.46), 0.42, 0.31, 0.62, 0.02),
+  part(new THREE.BoxGeometry(0.05, 0.28, 0.07), 0.3, -0.31, 0.45, 0.2),
+  part(new THREE.BoxGeometry(0.05, 0.28, 0.07), 0.3, 0.31, 0.45, 0.2),
+]);
+const recGeo = mergeGeometries([
+  part(RB(0.94, 0.36, 0.82, 0.06), 0.28, 0, 0.2, 0.02),
+  part(RB(0.78, 0.2, 0.74, 0.08), 1.0, 0, 0.47, -0.04),
+  part(RB(0.78, 0.92, 0.22, 0.09), 0.92, 0, 0.94, 0.38, 0.22),
+  part(RB(0.56, 0.22, 0.2, 0.08), 0.75, 0, 1.4, 0.5, 0.22),
+  part(RB(0.13, 0.3, 0.82, 0.05), 0.5, -0.46, 0.58, 0.02),
+  part(RB(0.13, 0.3, 0.82, 0.05), 0.5, 0.46, 0.58, 0.02),
+  part(RB(0.7, 0.1, 0.32, 0.04), 0.65, 0, 0.33, -0.55, -0.55),
+]);
+const seatMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.05 });
+const stdList = seats.filter((s) => s.kind === 'std');
+const recList = seats.filter((s) => s.kind === 'rec');
+const stdMesh = new THREE.InstancedMesh(stdGeo, seatMat, stdList.length);
+const recMesh = new THREE.InstancedMesh(recGeo, seatMat, recList.length);
+const meshLists = new Map([[stdMesh, stdList], [recMesh, recList]]);
+{
+  const o = new THREE.Object3D();
+  for (const [mesh, list] of meshLists) {
+    list.forEach((s, i) => {
+      s.mesh = mesh; s.idx = i;
+      o.position.copy(s.pos); o.rotation.set(0, s.theta, 0); o.updateMatrix();
+      mesh.setMatrixAt(i, o.matrix);
+    });
+    mesh.computeBoundingSphere();
+    scene.add(mesh);
+  }
+}
+const C = {
+  booked: new THREE.Color('#2b2f3b'),
+  pick: new THREE.Color('#5ff6e8'),
+  white: new THREE.Color('#ffffff'),
+  cls: Object.fromEntries(Object.entries(CLASSES).map(([k, v]) => [k, new THREE.Color(v.color)])),
+};
+const tmpC = new THREE.Color();
+function seatColor(s, out) {
+  if (s.selected) out.copy(C.pick);
+  else if (s.booked) out.copy(C.booked);
+  else { out.copy(C.cls[s.cls]); if (activeClass && s.cls !== activeClass) out.multiplyScalar(0.18); }
+  if (s === hovered && !s.selected) out.lerp(C.white, s.booked ? 0.12 : 0.45);
+  return out;
+}
+function paint(s) { s.mesh.setColorAt(s.idx, seatColor(s, tmpC)); s.mesh.instanceColor.needsUpdate = true; }
+function paintAll() { seats.forEach((s) => s.mesh.setColorAt(s.idx, seatColor(s, tmpC))); stdMesh.instanceColor.needsUpdate = true; recMesh.instanceColor.needsUpdate = true; }
+paintAll();
+
+/* ---------------- Camera moves ---------------- */
+const VIEWS = {
+  overview: [[-15, 24, 17], [0, 1, -2]],
+  stage: [[0, 4.4, -12.4], [0, 3.6, 6]],
+  balcony: [[0, 9.1, 14.4], [0, 5.4, -15]],
+  bird: [[0, 36, 0.6], [0, 0, 0]],
+};
+let fly = null, tour = null;
+const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+function flyTo(pos, target, dur = 1.5) {
+  stopTour();
+  fly = { p0: camera.position.clone(), t0: controls.target.clone(), p1: new THREE.Vector3(...pos), t1: new THREE.Vector3(...target), start: performance.now(), dur: reduceMotion ? 1 : dur * 1000 };
+}
+function setView(name) {
+  currentView = name;
+  document.querySelectorAll('.views [data-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === name)));
+  $('#seatTag').hidden = true;
+  if (VIEWS[name]) flyTo(...VIEWS[name]);
+}
+function seatView(s) {
+  const eye = s.pos.clone().add(new THREE.Vector3(Math.sin(s.theta) * 0.15, s.kind === 'rec' ? 1.25 : 1.15, Math.cos(s.theta) * 0.15));
+  const look = new THREE.Vector3(0, SCREEN_Y, SCREEN_Z).sub(eye).normalize().multiplyScalar(1.2).add(eye);
+  flyTo(eye.toArray(), look.toArray(), 1.8);
+  currentView = 'seat';
+  document.querySelectorAll('.views [data-view]').forEach((b) => b.setAttribute('aria-pressed', 'false'));
+  const tag = $('#seatTag'); tag.textContent = `View from ${s.row}${s.num} · ${CLASSES[s.cls].name}`; tag.hidden = false;
+}
+const tourPath = new THREE.CatmullRomCurve3([
+  [0, 12, 24], [12, 9, 11], [10.5, 4.5, -1], [6, 2.6, -11], [0, 3.4, -12.6], [-7, 3, -9], [-10.5, 6, 4], [-6, 9.6, 13.5], [0, 9.2, 14.5],
+].map((p) => new THREE.Vector3(...p)), true, 'centripetal');
+const tourLook = new THREE.CatmullRomCurve3([
+  [0, 4, -6], [0, 3, -6], [0, 3, -2], [0, 3, 4], [0, 3.4, 8], [0, 3, 4], [0, 5, -15], [0, 5.5, -15], [0, 5.5, -15],
+].map((p) => new THREE.Vector3(...p)), true);
+function startTour() {
+  fly = null; tour = { start: performance.now() };
+  $('#tourBtn').setAttribute('aria-pressed', 'true'); $('#tourBtn').textContent = '■ Stop tour';
+  document.querySelectorAll('.views [data-view]').forEach((b) => b.setAttribute('aria-pressed', 'false'));
+  $('#seatTag').hidden = true;
+}
+function stopTour() {
+  if (!tour) return;
+  tour = null; $('#tourBtn').setAttribute('aria-pressed', 'false'); $('#tourBtn').textContent = '▶ Tour';
+}
+controls.addEventListener('start', () => { fly = null; stopTour(); });
+
+/* ---------------- Interaction ---------------- */
+const raycaster = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+function seatAt(clientX, clientY) {
+  const r = renderer.domElement.getBoundingClientRect();
+  ndc.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
+  raycaster.setFromCamera(ndc, camera);
+  const hit = raycaster.intersectObjects([stdMesh, recMesh], false)[0];
+  return hit ? meshLists.get(hit.object)[hit.instanceId] : null;
+}
+const tip = $('#tip');
+function showTip(s, clientX, clientY) {
+  if (!s) { tip.hidden = true; return; }
+  const r = stage.getBoundingClientRect();
+  const c = CLASSES[s.cls];
+  tip.className = 'tip' + (s.booked ? ' is-booked' : s.selected ? ' is-picked' : '');
+  const price = s.partner ? `${inr(c.price * 2)} per pair` : inr(c.price);
+  tip.innerHTML = `<b>Row ${s.row} · Seat ${s.num}</b><span>${s.booked ? 'Already booked' : s.selected ? 'Your pick · tap to remove' : `${c.name} · ${price}`}</span>`;
+  tip.style.left = Math.min(Math.max(clientX - r.left, 90), r.width - 90) + 'px';
+  tip.style.top = Math.max(clientY - r.top, 60) + 'px';
+  tip.hidden = false;
+}
+function setHover(s) {
+  if (s === hovered) return;
+  const old = hovered; hovered = s;
+  if (old) paint(old); if (s) paint(s);
+  renderer.domElement.style.cursor = s ? (s.booked ? 'not-allowed' : 'pointer') : 'grab';
+}
+let downAt = null, moveQueued = null, tapTipTimer = 0;
+renderer.domElement.addEventListener('pointerdown', (e) => { downAt = { x: e.clientX, y: e.clientY, t: performance.now() }; });
+renderer.domElement.addEventListener('pointermove', (e) => {
+  if (e.pointerType === 'touch') return;
+  moveQueued = { x: e.clientX, y: e.clientY };
+});
+renderer.domElement.addEventListener('pointerleave', () => { moveQueued = null; setHover(null); tip.hidden = true; });
+renderer.domElement.addEventListener('pointerup', (e) => {
+  if (!downAt) return;
+  const moved = Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y);
+  const quick = performance.now() - downAt.t < 600;
+  downAt = null;
+  if (moved > 6 || !quick) return;
+  const s = seatAt(e.clientX, e.clientY);
+  if (!s) return;
+  toggleSeat(s);
+  showTip(s, e.clientX, e.clientY);
+  if (e.pointerType === 'touch') { clearTimeout(tapTipTimer); tapTipTimer = setTimeout(() => { tip.hidden = true; }, 1600); }
+});
+renderer.domElement.addEventListener('dblclick', (e) => {
+  const s = seatAt(e.clientX, e.clientY);
+  if (s) seatView(s);
+});
+
+function groupOf(s) { return s.partner ? [s, s.partner] : [s]; }
+function toggleSeat(s) {
+  if (s.booked) { toast(`Row ${s.row} · Seat ${s.num} is already booked.`); return; }
+  const group = groupOf(s);
+  if (s.selected) {
+    group.forEach((g) => { g.selected = false; });
+    picked = picked.filter((p) => !group.includes(p));
+  } else {
+    if (picked.length + group.length > MAX_SEATS) { toast(`You can book up to ${MAX_SEATS} seats at a time.`); return; }
+    if (group.some((g) => g.booked)) { toast('The other recliner in this pair is booked.'); return; }
+    group.forEach((g) => { g.selected = true; picked.push(g); });
+    if (s.partner) toast(`Recliners come in pairs, so ${s.partner.id} was added with ${s.id}.`);
+  }
+  group.forEach(paint);
+  renderPanel();
+}
+function clearPicks() {
+  picked.forEach((p) => { p.selected = false; paint(p); });
+  picked = [];
+  renderPanel();
+}
+
+/* Best seats */
+function bestBlock(n, cls) {
+  const list = rows.filter((r) => r.cls === cls);
+  const need = list[0]?.pair ? n + (n % 2) : n;
+  const ideal = (list.length - 1) * 0.62;
+  let best = null;
+  list.forEach((r, ri) => {
+    for (const b of r.blocks) for (let i = 0; i + need <= b.length; i++) {
+      if (r.pair && i % 2) continue;
+      const run = b.slice(i, i + need);
+      if (run.some((x) => x.booked)) continue;
+      const mid = (run[0].s + run[need - 1].s) / 2;
+      const score = Math.abs(ri - ideal) * 1.2 + Math.abs(mid) / r.pitch * 0.45;
+      if (!best || score < best.score) best = { score, run };
+    }
+  });
+  return best ? best.run : null;
+}
+function quickPick() {
+  const order = activeClass ? [activeClass] : BEST_FALLBACK;
+  for (const cls of order) {
+    const run = bestBlock(quickN, cls);
+    if (!run) continue;
+    clearPicks();
+    run.forEach((s) => { s.selected = true; picked.push(s); paint(s); });
+    renderPanel();
+    const extra = run.length > quickN ? ' Recliners come in pairs, so we rounded up.' : '';
+    toast(`Picked ${run[0].id}–${run[run.length - 1].id} in ${CLASSES[cls].name}.${extra}`);
+    return;
+  }
+  toast(activeClass ? `No ${quickN} seats together left in ${CLASSES[activeClass].name}. Try fewer seats or another class.` : `No ${quickN} seats together are left. Try fewer seats.`);
+}
+
+/* ---------------- Panel ---------------- */
+function seatsLeft(cls) { return seats.filter((s) => s.cls === cls && !s.booked && !s.selected).length; }
+function renderPanel() {
+  $('#classList').innerHTML = CLASS_ORDER.map((k) => {
+    const c = CLASSES[k];
+    return `<button type="button" class="class-card" data-cls="${k}" aria-pressed="${activeClass === k}" style="--cc:${c.color}">
+      <span class="bar"></span>
+      <span><strong>${c.name}</strong><small>${c.desc}</small></span>
+      <span class="price"><strong>${inr(c.price)}</strong><small>${seatsLeft(k)} left</small></span></button>`;
+  }).join('');
+  const sorted = [...picked].sort((a, b) => a.rowRef === b.rowRef ? a.num - b.num : rows.findIndex((r) => r.letter === a.row) - rows.findIndex((r) => r.letter === b.row));
+  $('#chips').innerHTML = sorted.map((s) => `<span class="chip" style="--cc:${CLASSES[s.cls].color}">
+      <button type="button" data-view-seat="${s.id}" title="See the view from ${s.id}"><i></i>${s.id}</button>
+      <button type="button" class="x" data-remove="${s.id}" aria-label="Remove ${s.id}">×</button></span>`).join('');
+  $('#emptySeats').hidden = picked.length > 0;
+  $('#clearBtn').hidden = picked.length === 0;
+  const sub = picked.reduce((a, s) => a + CLASSES[s.cls].price, 0);
+  const fees = picked.length * FEE;
+  $('#ticketLine').textContent = `${picked.length} ticket${picked.length === 1 ? '' : 's'}`;
+  $('#feeLine').textContent = `+ fees ${inr(fees)}`;
+  $('#total').textContent = inr(sub + fees);
+  $('#continueBtn').disabled = picked.length === 0;
+  $('#qCount').textContent = quickN;
+  $('#bestBtn').textContent = `Best ${quickN} seat${quickN === 1 ? '' : 's'}`;
+  $('#quickHint').textContent = activeClass
+    ? `Finds ${quickN} seats together in ${CLASSES[activeClass].name}, centred at the best viewing distance.`
+    : `Finds ${quickN} seats together, starting with Prime. Pick a class above to search only there.`;
+}
+$('#classList').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-cls]'); if (!b) return;
+  activeClass = activeClass === b.dataset.cls ? null : b.dataset.cls;
+  paintAll(); renderPanel();
+});
+$('#chips').addEventListener('click', (e) => {
+  const rm = e.target.closest('[data-remove]');
+  if (rm) { toggleSeat(seatById.get(rm.dataset.remove)); return; }
+  const v = e.target.closest('[data-view-seat]');
+  if (v) seatView(seatById.get(v.dataset.viewSeat));
+});
+$('#qMinus').addEventListener('click', () => { quickN = Math.max(1, quickN - 1); renderPanel(); });
+$('#qPlus').addEventListener('click', () => { quickN = Math.min(MAX_SEATS, quickN + 1); renderPanel(); });
+$('#bestBtn').addEventListener('click', quickPick);
+$('#clearBtn').addEventListener('click', clearPicks);
+document.querySelectorAll('.views [data-view]').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
+$('#tourBtn').addEventListener('click', () => (tour ? stopTour() : startTour()));
+$('#lightsBtn').addEventListener('click', (e) => { houseOn = !houseOn; e.currentTarget.setAttribute('aria-pressed', String(houseOn)); });
+$('#hdBtn').addEventListener('click', (e) => { hd = !hd; e.currentTarget.setAttribute('aria-pressed', String(hd)); resize(); });
+
+let toastTimer = 0;
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 2800);
+}
+
+/* ---------------- Checkout ---------------- */
+const SNACKS = [
+  { id: 'pop', name: 'Salted popcorn, large', price: 280, tone: '#ffd36b', tag: 'POP' },
+  { id: 'car', name: 'Caramel popcorn, large', price: 320, tone: '#e0a04a', tag: 'CAR' },
+  { id: 'nac', name: 'Nachos with cheese dip', price: 260, tone: '#ffb347', tag: 'NAC' },
+  { id: 'cof', name: 'Cold coffee', price: 220, tone: '#c9a27e', tag: 'COF' },
+  { id: 'cmb', name: 'Combo · 2 popcorn + 2 drinks', price: 690, tone: '#5ff6e8', tag: 'x2' },
+];
+const cart = {};
+const modal = $('#modal'), sheet = $('#sheet');
+let lastFocus = null;
+function setStep(n) { [1, 2, 3].forEach((i) => $('#step' + i).toggleAttribute('aria-current', false)); $('#step' + n).setAttribute('aria-current', 'step'); }
+function openModal(render) { lastFocus = document.activeElement; modal.hidden = false; render(); }
+function closeModal() { modal.hidden = true; setStep(1); lastFocus?.focus?.(); }
+function snackTotal() { return SNACKS.reduce((a, s) => a + (cart[s.id] || 0) * s.price, 0); }
+function renderSnacks() {
+  setStep(2);
+  sheet.innerHTML = `<div><h2 id="sheetTitle">Add snacks</h2><p class="sub">Delivered to your seat${picked.some((p) => p.cls === 'royal') ? ' (recliners) or ready at the counter' : ' or ready at the counter'} before the interval.</p></div>
+    <div class="snacks">${SNACKS.map((s) => `<div class="snack">
+      <span class="art" style="background:${s.tone}">${s.tag}</span>
+      <span><strong>${s.name}</strong><small>${inr(s.price)}</small></span>
+      <span class="stepper"><button type="button" data-snack="${s.id}" data-d="-1" aria-label="Remove one ${s.name}">−</button><output>${cart[s.id] || 0}</output><button type="button" data-snack="${s.id}" data-d="1" aria-label="Add one ${s.name}">+</button></span>
+    </div>`).join('')}</div>
+    <div class="sheet-actions"><button type="button" class="ghost" id="backSeats">Back</button><button type="button" class="cta" id="toReview">Review · ${inr(orderTotal())}</button></div>`;
+  sheet.querySelector('#toReview').focus();
+}
+function orderTotal() { return picked.reduce((a, s) => a + CLASSES[s.cls].price, 0) + picked.length * FEE + snackTotal(); }
+function renderReview() {
+  setStep(3);
+  const byCls = CLASS_ORDER.map((k) => [k, picked.filter((p) => p.cls === k)]).filter(([, l]) => l.length);
+  const snackRows = SNACKS.filter((s) => cart[s.id]).map((s) => `<tr><td>${s.name} × ${cart[s.id]}</td><td>${inr(s.price * cart[s.id])}</td></tr>`).join('');
+  sheet.innerHTML = `<div><h2 id="sheetTitle">Review your booking</h2><p class="sub">Kaalam · Sat 31 Oct · 10:40 PM · Lumen Talkies, Screen 2</p></div>
+    <table class="lines-table"><tbody>
+      ${byCls.map(([k, l]) => `<tr><td>${CLASSES[k].name} × ${l.length}<span class="muted">${l.map((s) => s.id).join(', ')}</span></td><td>${inr(CLASSES[k].price * l.length)}</td></tr>`).join('')}
+      ${snackRows}
+      <tr><td>Convenience fee (${inr(FEE)} per ticket)</td><td>${inr(picked.length * FEE)}</td></tr>
+      <tr class="total-row"><td>Total</td><td>${inr(orderTotal())}</td></tr>
+    </tbody></table>
+    <div class="sheet-actions"><button type="button" class="ghost" id="backSnacks">Back</button><button type="button" class="cta" id="confirm">Confirm booking</button></div>
+    <p class="demo-note">Demo checkout. No payment is taken.</p>`;
+  sheet.querySelector('#confirm').focus();
+}
+function renderTicket() {
+  const id = 'LMN-' + Math.random().toString(36).slice(2, 8).toUpperCase();
+  const list = [...picked].map((s) => s.id).join(', ');
+  const snacks = SNACKS.filter((s) => cart[s.id]).map((s) => `${cart[s.id]}× ${s.name}`).join(', ') || 'None';
+  const paid = orderTotal();
+  picked.forEach((p) => { p.selected = false; p.booked = true; paint(p); });
+  picked = []; Object.keys(cart).forEach((k) => delete cart[k]);
+  renderPanel();
+  sheet.innerHTML = `<div><h2 id="sheetTitle">You're booked</h2><p class="sub">Show this at the entry. Your seats are now marked booked in the hall.</p></div>
+    <div class="ticket">
+      <div class="ticket-top"><span class="t-title">KAALAM</span><small>Sat 31 Oct · 10:40 PM · Lumen Talkies, Anna Nagar · Screen 2</small></div>
+      <div class="ticket-body">
+        <dl><dt>Booking</dt><dd>${id}</dd><dt>Seats</dt><dd>${list}</dd><dt>Snacks</dt><dd>${snacks}</dd><dt>Paid</dt><dd>${inr(paid)}</dd></dl>
+        <canvas id="qr" width="25" height="25" aria-label="Entry code"></canvas>
+      </div>
+    </div>
+    <div class="sheet-actions"><button type="button" class="cta" id="done">Done</button></div>`;
+  const g = sheet.querySelector('#qr').getContext('2d');
+  const r = mulberry32([...id].reduce((a, ch) => a * 31 + ch.charCodeAt(0), 7));
+  g.fillStyle = '#fff'; g.fillRect(0, 0, 25, 25); g.fillStyle = '#10121a';
+  for (let y = 0; y < 25; y++) for (let x = 0; x < 25; x++) if (r() > 0.5) g.fillRect(x, y, 1, 1);
+  for (const [fx, fy] of [[0, 0], [18, 0], [0, 18]]) { g.fillStyle = '#10121a'; g.fillRect(fx, fy, 7, 7); g.fillStyle = '#fff'; g.fillRect(fx + 1, fy + 1, 5, 5); g.fillStyle = '#10121a'; g.fillRect(fx + 2, fy + 2, 3, 3); }
+  sheet.querySelector('#done').focus();
+}
+$('#continueBtn').addEventListener('click', () => openModal(renderSnacks));
+sheet.addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.snack) { const k = b.dataset.snack; cart[k] = Math.max(0, Math.min(9, (cart[k] || 0) + Number(b.dataset.d))); renderSnacks(); sheet.querySelector(`[data-snack="${k}"][data-d="${b.dataset.d}"]`)?.focus(); return; }
+  if (b.id === 'backSeats' || b.id === 'done') closeModal();
+  if (b.id === 'toReview') renderReview();
+  if (b.id === 'backSnacks') renderSnacks();
+  if (b.id === 'confirm') renderTicket();
+});
+modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+addEventListener('keydown', (e) => { if (e.key === 'Escape' && !modal.hidden) closeModal(); });
+
+/* ---------------- Loop ---------------- */
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  if (!w || !h) return;
+  renderer.setPixelRatio(hd ? Math.min(devicePixelRatio, 1.75) : 0.8);
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.fov = w / h < 1 ? 64 : 50;
+  camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(stage);
+resize();
+
+const lookTmp = new THREE.Vector3();
+let first = true;
+function frame(now) {
+  const t = now / 1000;
+  screenMat.uniforms.uTime.value = t;
+  const cyc = (t % 26) / 26;
+  screenMat.uniforms.uTitleMix.value = THREE.MathUtils.smoothstep(cyc, 0.04, 0.1) * (1 - THREE.MathUtils.smoothstep(cyc, 0.26, 0.32));
+
+  if (fly) {
+    const k = Math.min((now - fly.start) / fly.dur, 1), e = ease(k);
+    camera.position.lerpVectors(fly.p0, fly.p1, e);
+    controls.target.lerpVectors(fly.t0, fly.t1, e);
+    if (k >= 1) fly = null;
+  } else if (tour) {
+    const u = ((now - tour.start) / 32000) % 1;
+    camera.position.copy(tourPath.getPointAt(u));
+    controls.target.copy(tourLook.getPointAt(u));
+  }
+  controls.update();
+
+  // lights
+  houseLevel += ((houseOn ? 1 : 0) - houseLevel) * 0.06;
+  hemi.intensity = 0.12 + houseLevel * 0.95;
+  houseLights.forEach((l) => { l.intensity = 4 + houseLevel * 90; });
+  glowMat.color.setRGB(1, 0.77, 0.54).multiplyScalar(0.35 + houseLevel * 0.65);
+  const flash = THREE.MathUtils.smoothstep(Math.sin(t * 0.71) * Math.sin(t * 1.33), 0.97, 1.0);
+  screenLight.intensity = (2.2 + (1 - houseLevel) * 2.5) * (1 - screenMat.uniforms.uTitleMix.value * 0.5) + flash * 6;
+  screenLight.color.setRGB(1, 0.6 + flash * 0.3, 0.38 + flash * 0.5);
+
+  // pulse selected seats
+  if (picked.length) {
+    const p = 0.5 + 0.5 * Math.sin(t * 5);
+    picked.forEach((s) => { s.mesh.setColorAt(s.idx, tmpC.copy(C.pick).lerp(C.white, 0.1 + p * 0.3)); });
+    stdMesh.instanceColor.needsUpdate = true; recMesh.instanceColor.needsUpdate = true;
+  }
+
+  if (moveQueued && !fly && !tour) {
+    const s = seatAt(moveQueued.x, moveQueued.y);
+    setHover(s); showTip(s, moveQueued.x, moveQueued.y);
+    moveQueued = null;
+  }
+
+  renderer.render(scene, camera);
+  if (first) { first = false; $('#loading').hidden = true; }
+  requestAnimationFrame(frame);
+}
+
+/* Opening state: a realistic pick so the panel shows how it works */
+quickN = 2;
+{
+  const run = bestBlock(2, 'prime');
+  run?.forEach((s) => { s.selected = true; picked.push(s); });
+  paintAll();
+}
+renderPanel();
+setView('overview');
+fly.dur = reduceMotion ? 1 : 2600;
+requestAnimationFrame(frame);
+</script>
