@@ -2,7 +2,7 @@
 // requests on the device (no server), asks only for what is missing, picks the
 // best show and seats, and books after the person says yes.
 import { MOVIES, CITIES, movieById, isNowShowing, theatresFor, theatreById, showsFor, today, addDays, dayKey, fromKey, hmLabel, partOfDay, FEE_PER_TICKET, releaseDate } from './data.js';
-import { getLayout, bookedFor, bestBlock, scoreLabel, HALLS } from './layout.js';
+import { layoutOf, pricesOf, bookedFor, bestBlock, scoreLabel, HALLS } from './layout.js';
 import { t, tx, state, icon, inr, esc, clsName, fmtDate, $ } from './ui.js';
 import { loadNLU, nluParse } from './nlu.js';
 
@@ -186,9 +186,9 @@ export function createAgent(app) {
     propose(pool.find((s) => seatsFor(s)) || null);
   }
   function seatsFor(show) {
-    const lay = getLayout(show.hall);
+    const lay = layoutOf(show);
     const booked = bookedFor(show, lay, app.mySeats(show.id));
-    const prices = HALLS[show.hall].prices;
+    const prices = pricesOf(show);
     let cls = null;
     const classes = Object.keys(prices);
     if (ctx.pref === 'recliner') cls = classes.find((c) => ['recliner', 'royal', 'couple'].includes(c));
@@ -206,7 +206,7 @@ export function createAgent(app) {
     const seats = seatsFor(show);
     if (!seats) { bubble(say.full()); chips(altChips(show)); return; }
     const m = movieById(show.movieId), th = theatreById(show.theatreId);
-    const prices = HALLS[show.hall].prices;
+    const prices = pricesOf(show);
     const total = seats.reduce((a, s) => a + prices[s.cls], 0) + seats.length * FEE_PER_TICKET;
     const score = Math.round(seats.reduce((a, s) => a + s.score, 0) / seats.length);
     const d = fromKey(show.dk);

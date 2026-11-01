@@ -45,11 +45,11 @@ export function mountMap(host, lay, { booked, selected, prices, best = new Set()
   function paint(s) {
     const b = els.get(s.id); if (!b) return;
     const isB = booked.has(s.id), isS = selected.has(s.id);
-    b.classList.toggle('is-booked', isB); b.classList.toggle('is-picked', isS); b.classList.toggle('is-acc', !!s.acc && !isB && !isS); b.classList.toggle('is-best', best.has(s.id));
+    b.classList.toggle('is-booked', isB); b.classList.toggle('is-off', !!s.disabled); b.classList.toggle('is-picked', isS); b.classList.toggle('is-acc', !!s.acc && !isB && !isS); b.classList.toggle('is-best', best.has(s.id));
     b.style.setProperty('--cc', mode === 'view' ? scoreColor(s.score) : CLASS_META[s.cls].color);
-    b.innerHTML = isB ? icon('person') : isS ? icon('check') : s.acc ? icon('wheel') : mode === 'view' ? (K >= 26 ? `<b>${s.score}</b>` : '') : (K >= 28 ? `<b>${s.num}</b>` : '');
+    b.innerHTML = s.disabled ? icon('x') : isB ? icon('person') : isS ? icon('check') : s.acc ? icon('wheel') : mode === 'view' ? (K >= 26 ? `<b>${s.score}</b>` : '') : (K >= 28 ? `<b>${s.num}</b>` : '');
     b.setAttribute('aria-pressed', String(isS));
-    b.setAttribute('aria-label', `Row ${s.row} seat ${s.num}, ${isB ? t('booked') : `${clsName(s.cls)} ${inr(prices[s.cls])}, ${t('score')} ${s.score}`}`);
+    b.setAttribute('aria-label', `Row ${s.row} seat ${s.num}, ${s.disabled ? 'Not available' : isB ? t('booked') : `${clsName(s.cls)} ${inr(prices[s.cls])}, ${t('score')} ${s.score}`}`);
   }
   function paintAll() { lay.seats.forEach(paint); }
   inner.addEventListener('click', (e) => { const b = e.target.closest('.m-seat'); if (b) onTap(lay.byId.get(b.dataset.id), e); });

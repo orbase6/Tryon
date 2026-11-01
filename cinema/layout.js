@@ -1,95 +1,155 @@
-// Hall layouts: one function per hall type. Pure data (no Three.js) so the
-// 2D map, the 3D view, the view score and the voice assistant all share it.
+// Hall layouts. Every screen is described by a "spec": the seat grid (like a
+// box-office seat plan) plus a few physical measurements. From that one spec we
+// build the 2D map, the 3D hall, the view score and the assistant's seat picks.
+//
+// Row plan format (one string per row, blocks separated by "_" = aisle):
+//   S seat · R recliner (sold in pairs) · W wheelchair space · X broken/blocked seat · . empty space
+//   A number means that many S (or R in a recliner row), e.g. "W3_12_3W"
 import { mulberry32, hash } from './data.js';
 
-const L = (s) => s.split('');
+const rowsOf = (letters, cls, plan) => letters.split('').map((r) => ({ r, cls, plan }));
 
 export const HALLS = {
   classic: {
     en: 'Stadium + balcony', ta: 'ஸ்டேடியம் + பால்கனி', prices: { royal: 550, balcony: 320, prime: 240, classic: 160 },
-    build() {
-      const rows = [];
-      L('ABCDEFGHIJK').forEach((r, i) => rows.push({ letter: r, cls: i < 3 ? 'classic' : 'prime', z: -8.2 + i * 1.15, y: 0.12 + i * 0.26, blocks: i < 3 ? [4, 12, 4] : [5, 14, 5], pitch: 0.68, kind: 'std' }));
-      rows.push({ letter: 'L', cls: 'royal', z: 4.85, y: 3.15, blocks: [4, 8, 4], pitch: 1.1, kind: 'rec', pair: true });
-      rows.push({ letter: 'M', cls: 'royal', z: 6.65, y: 3.6, blocks: [4, 8, 4], pitch: 1.1, kind: 'rec', pair: true });
-      L('NOPQ').forEach((r, i) => rows.push({ letter: r, cls: 'balcony', z: 9.7 + i * 1.2, y: 6.25 + i * 0.4, blocks: [6, 14, 6], pitch: 0.68, kind: 'std', balcony: true }));
-      return { CZ: -34, W: 13.45, H: 14, front: -16, back: 15.5, screen: { z: -15.1, y: 6.2, w: 20, h: 8.5, curve: 0.7 }, rows, balcony: { frontZ: 8.4, base: 6.0 } };
+    spec: {
+      screen: { w: 20, h: 8.5, curve: 0.7, elev: 1.95 }, room: { halfW: 13.45, ceiling: 14, curve: 18.9 },
+      geo: { firstRow: 6.9, rowGap: 1.15, recGap: 1.8, rise: 0.26, recRise: 0.45 },
+      rows: [{ r: 'A', cls: 'classic', plan: 'W3_12_3W' }, ...rowsOf('BC', 'classic', '4_12_4'), ...rowsOf('DEFGHIJK', 'prime', '5_14_5'), ...rowsOf('LM', 'royal', '4_8_4'), ...rowsOf('NOPQ', 'balcony', '6_14_6')],
+      balcony: { from: 'N', base: 6.0, gap: 3.05, rowGap: 1.2, rise: 0.4 },
     },
   },
   imax: {
     en: 'IMAX · steep stadium', ta: 'IMAX · செங்குத்தான ஸ்டேடியம்', prices: { premium: 450, standard: 350 },
-    build() {
-      const rows = L('ABCDEFGHIJKLMN').map((r, i) => ({ letter: r, cls: i >= 4 && i <= 10 ? 'premium' : 'standard', z: -7.5 + i * 1.2, y: 0.1 + i * 0.46, blocks: [6, 16, 6], pitch: 0.7, kind: 'std' }));
-      return { CZ: -42, W: 15, H: 19, front: -17.5, back: 10.6, screen: { z: -16.6, y: 8.6, w: 27, h: 14.5, curve: 1.8 }, rows, balcony: null };
+    spec: {
+      screen: { w: 27, h: 14.5, curve: 1.8, elev: 1.35 }, room: { halfW: 15, ceiling: 19, curve: 25.4 },
+      geo: { firstRow: 9.1, rowGap: 1.2, recGap: 1.8, rise: 0.46, recRise: 0.5 },
+      rows: [{ r: 'A', cls: 'standard', plan: 'W5_16_5W' }, ...rowsOf('BCD', 'standard', '6_16_6'), ...rowsOf('EFGHIJK', 'premium', '6_16_6'), ...rowsOf('LMN', 'standard', '6_16_6')],
+      balcony: null,
     },
   },
   lounge: {
     en: 'All-recliner lounge', ta: 'முழு ரெக்லைனர் லவுஞ்ச்', prices: { couple: 900, recliner: 600 },
-    build() {
-      const rows = L('ABCDE').map((r, i) => ({ letter: r, cls: 'recliner', z: -2.4 + i * 1.85, y: 0.12 + i * 0.36, blocks: [4, 6, 4], pitch: 1.1, kind: 'rec', pair: true }));
-      rows.push({ letter: 'F', cls: 'couple', z: -2.4 + 5 * 1.85, y: 0.12 + 5 * 0.36, blocks: [2, 4, 2], pitch: 1.1, kind: 'rec', pair: true });
-      return { CZ: -60, W: 9.2, H: 8.5, front: -10.5, back: 9.4, screen: { z: -9.8, y: 3.7, w: 12, h: 5.1, curve: 0.3 }, rows, balcony: null };
+    spec: {
+      screen: { w: 12, h: 5.1, curve: 0.3, elev: 1.15 }, room: { halfW: 9.2, ceiling: 8.5, curve: 50.2 },
+      geo: { firstRow: 7.4, rowGap: 1.85, recGap: 1.85, rise: 0.36, recRise: 0.36 },
+      rows: [...rowsOf('ABCDE', 'recliner', '4_6_4'), { r: 'F', cls: 'couple', plan: '2_4_2' }],
+      balcony: null,
     },
   },
   single: {
     en: 'Old-style single screen', ta: 'பழைய ஒற்றைத் திரை', prices: { balcony: 150, back: 120, middle: 90, front: 60 },
-    build() {
-      const rows = L('ABCDEFGHIJKLMNOP').map((r, i) => ({ letter: r, cls: i < 4 ? 'front' : i < 11 ? 'middle' : 'back', z: -9.5 + i * 1.02, y: 0.05 + i * 0.12, blocks: [6, 16, 6], pitch: 0.66, kind: 'std' }));
-      L('QRST').forEach((r, i) => rows.push({ letter: r, cls: 'balcony', z: 9.6 + i * 1.2, y: 5.5 + i * 0.42, blocks: [7, 16, 7], pitch: 0.66, kind: 'std', balcony: true }));
-      return { CZ: -400, W: 14, H: 13, front: -16, back: 15.6, screen: { z: -15.2, y: 5.4, w: 18, h: 7.6, curve: 0 }, rows, balcony: { frontZ: 8.2, base: 5.2 } };
+    spec: {
+      screen: { w: 18, h: 7.6, curve: 0, elev: 1.6 }, room: { halfW: 14, ceiling: 13, curve: 384.8 },
+      geo: { firstRow: 5.7, rowGap: 1.02, recGap: 1.6, rise: 0.12, recRise: 0.3 },
+      rows: [{ r: 'A', cls: 'front', plan: 'W5_16_5W' }, ...rowsOf('BCD', 'front', '6_16_6'), ...rowsOf('EFGHIJK', 'middle', '6_16_6'), ...rowsOf('LMNOP', 'back', '6_16_6'), ...rowsOf('QRST', 'balcony', '7_16_7')],
+      balcony: { from: 'Q', base: 5.2, gap: 3.8, rowGap: 1.2, rise: 0.42 },
     },
   },
   multiplex: {
     en: 'Standard multiplex', ta: 'சாதாரண மல்டிப்ளெக்ஸ்', prices: { recliner: 400, prime: 220, classic: 170 },
-    build() {
-      const rows = L('ABCDEFGHIJ').map((r, i) => ({ letter: r, cls: i < 3 ? 'classic' : 'prime', z: -6.2 + i * 1.1, y: 0.1 + i * 0.3, blocks: [4, 12, 4], pitch: 0.68, kind: 'std' }));
-      rows.push({ letter: 'K', cls: 'recliner', z: 5.4, y: 3.5, blocks: [4, 6, 4], pitch: 1.1, kind: 'rec', pair: true });
-      return { CZ: -36, W: 11, H: 11, front: -13.2, back: 7.6, screen: { z: -12.4, y: 4.7, w: 16, h: 6.8, curve: 0.5 }, rows, balcony: null };
+    spec: {
+      screen: { w: 16, h: 6.8, curve: 0.5, elev: 1.3 }, room: { halfW: 11, ceiling: 11, curve: 23.6 },
+      geo: { firstRow: 6.2, rowGap: 1.1, recGap: 1.7, rise: 0.3, recRise: 0.7 },
+      rows: [{ r: 'A', cls: 'classic', plan: 'W3_12_3W' }, ...rowsOf('BC', 'classic', '4_12_4'), ...rowsOf('DEFGHIJ', 'prime', '4_12_4'), { r: 'K', cls: 'recliner', plan: '4_6_4' }],
+      balcony: null,
     },
   },
 };
 
+/* ---------- custom layouts saved from the admin editor (per screen) ---------- */
+const custom = new Map();
+export function setCustomLayouts(obj) { custom.clear(); for (const [k, v] of Object.entries(obj || {})) custom.set(k, v); cache.clear(); }
+export const customFor = (screenId) => custom.get(screenId) || null;
+const screenIdOf = (show) => `${show.theatreId}s${show.screenIdx}`;
+export function layoutFor(screenId, hall) { const c = custom.get(screenId); return c ? buildLayout(c, 'custom:' + screenId + ':' + hash(JSON.stringify(c))) : getLayout(hall); }
+export function pricesFor(screenId, hall) { const c = custom.get(screenId); return (c && c.prices) || HALLS[hall].prices; }
+export const layoutOf = (show) => layoutFor(screenIdOf(show), show.hall);
+export const pricesOf = (show) => pricesFor(screenIdOf(show), show.hall);
+export const hallName = (screenId, hall) => (custom.get(screenId)?.name ? { en: custom.get(screenId).name, ta: custom.get(screenId).name } : HALLS[hall]);
+
+/* ---------- plan parsing ---------- */
+export const REC_CLASSES = ['royal', 'recliner', 'couple'];
+export function parsePlan(plan, recRow) {
+  return plan.split('_').map((blk) => {
+    const cells = [];
+    for (const m of blk.toUpperCase().matchAll(/(\d+)|([SRWX.])/g)) {
+      if (m[1]) for (let i = 0; i < +m[1]; i++) cells.push(recRow ? 'R' : 'S');
+      else cells.push(m[2]);
+    }
+    return cells;
+  }).filter((c) => c.length);
+}
+
+/* ---------- build a layout from a spec ---------- */
 const cache = new Map();
-export function getLayout(hallKey) {
-  if (cache.has(hallKey)) return cache.get(hallKey);
-  const spec = HALLS[hallKey].build();
-  const { CZ } = spec;
-  const seats = [];
-  const rows = spec.rows.map((row, ri) => {
-    const R = row.z - CZ;
+export function getLayout(hallKey) { return buildLayout({ ...HALLS[hallKey].spec, prices: HALLS[hallKey].prices }, 'hall:' + hallKey, hallKey); }
+
+export function buildLayout(spec, key = 'x', hallKey = null) {
+  if (cache.has(key)) return cache.get(key);
+  const S = spec.screen, G = spec.geo, room = spec.room;
+  const screenZ = -15, CZ = screenZ - room.curve;
+  const balcIdx = spec.balcony ? spec.rows.findIndex((r) => r.r === spec.balcony.from) : -1;
+  // Row positions: distance and height grow row by row; recliner rows take more space
+  let z = screenZ + G.firstRow, y = 0.12, prevRec = false;
+  const rowsIn = spec.rows.map((r, i) => {
+    const cells = parsePlan(r.plan, /R/i.test(r.plan) || REC_CLASSES.includes(r.cls));
+    const rec = cells.flat().includes('R');
+    const isBalc = balcIdx >= 0 && i >= balcIdx;
+    if (i > 0) {
+      if (i === balcIdx) { z += spec.balcony.gap; y = spec.balcony.base + 0.28; }
+      else if (isBalc) { z += spec.balcony.rowGap; y += spec.balcony.rise; }
+      else { z += rec || prevRec ? G.recGap : G.rowGap; y += rec ? G.recRise : G.rise; }
+    }
+    prevRec = rec;
+    return { letter: r.r, cls: r.cls, z, y, cells, rec, balcony: isBalc };
+  });
+  const last = rowsIn[rowsIn.length - 1];
+  const front = screenZ - 0.9, back = last.z + (last.rec ? 2.6 : 2.3);
+  const lay = {
+    key, hallKey, CZ, W: room.halfW, H: room.ceiling, front, back,
+    screen: { z: screenZ, y: S.elev + S.h / 2, w: S.w, h: S.h, curve: S.curve },
+    balcony: spec.balcony ? { frontZ: rowsIn[balcIdx].z - 1.3, base: spec.balcony.base } : null,
+    prices: spec.prices || {},
+  };
+  const seats = [], disabled = new Set();
+  const rows = rowsIn.map((row, ri) => {
+    const R = row.z - CZ, pitch = row.rec ? 1.1 : 0.68;
     const blocks = [], gaps = [], items = [];
-    let s = 0, num = 0;
-    row.blocks.forEach((n, bi) => {
-      const block = [];
-      if (bi > 0) { const g0 = s; s += row.pitch + 0.9 + (row.pair ? 0.2 : 0); gaps.push((g0 + s) / 2); }
-      for (let k = 0; k < n; k++) {
-        if (k > 0) s += row.pair ? (k % 2 ? 1.04 : 1.26) : row.pitch;
+    let s = 0, num = 0, first = true;
+    row.cells.forEach((cells, bi) => {
+      if (bi > 0) { const g0 = s; s += pitch + 0.9 + (row.rec ? 0.2 : 0); gaps.push((g0 + s) / 2); }
+      let block = [], k = 0, recRun = 0;
+      cells.forEach((c, ci) => {
+        if (!(first && ci === 0)) { if (!(bi > 0 && ci === 0)) s += row.rec ? (recRun % 2 ? 1.04 : 1.26) : pitch; }
+        first = false;
+        if (c === '.') { if (block.length) blocks.push(block); block = []; k = 0; recRun = 0; return; }
         num++;
-        const seat = { row: row.letter, num, id: row.letter + num, cls: row.cls, kind: row.kind, s, block: bi, k, ri };
+        const seat = { row: row.letter, num, id: row.letter + num, cls: row.cls, kind: c === 'R' ? 'rec' : 'std', s, block: blocks.length, k: k++, ri };
+        if (c === 'W') seat.acc = true;
+        if (c === 'X') { seat.disabled = true; disabled.add(seat.id); }
+        recRun = c === 'R' ? recRun + 1 : 0;
         block.push(seat); items.push(seat);
-      }
-      blocks.push(block);
+      });
+      if (block.length) blocks.push(block);
     });
     const half = s / 2;
     for (const seat of items) {
-      seat.s -= half;
-      seat.theta = seat.s / R;
+      seat.s -= half; seat.theta = seat.s / R;
       seat.x = R * Math.sin(seat.theta); seat.y = row.y; seat.z = CZ + R * Math.cos(seat.theta);
       seats.push(seat);
     }
-    if (row.pair) for (const b of blocks) for (let k = 0; k + 1 < b.length; k += 2) { b[k].partner = b[k + 1]; b[k + 1].partner = b[k]; }
-    return { ...row, R, blocks, gaps: gaps.map((g) => g - half), half, seats: items, ri };
+    // recliners are sold in pairs (side by side inside a block)
+    for (const b of blocks) { const r = b.filter((x) => x.kind === 'rec'); for (let k = 0; k + 1 < r.length; k += 2) { r[k].partner = r[k + 1]; r[k + 1].partner = r[k]; } }
+    blocks.forEach((b, i) => b.forEach((x, k) => { x.block = i; x.k = k; }));
+    return { letter: row.letter, cls: row.cls, z: row.z, y: row.y, R, blocks, gaps: gaps.map((g) => g - half), half, seats: items, ri, pair: row.rec, pitch, balcony: row.balcony };
   });
-  // Wheelchair spaces: aisle-end seats of the first row on step-free halls
-  if (hallKey !== 'lounge') { const a = rows[0].seats; a[0].acc = true; a[a.length - 1].acc = true; }
-  // Tier boundaries (radius) for floors and camera limits
   const main = rows.filter((r) => !r.balcony), balc = rows.filter((r) => r.balcony);
-  main.forEach((r, i) => { r.frontR = main[i - 1] ? (main[i - 1].R + r.R) / 2 : r.R - 0.75; r.backR = main[i + 1] ? (r.R + main[i + 1].R) / 2 : (spec.balcony ? spec.balcony.frontZ - CZ : spec.back - CZ + 50); });
-  balc.forEach((r, i) => { r.frontR = balc[i - 1] ? (balc[i - 1].R + r.R) / 2 : spec.balcony.frontZ - CZ + 0.3; r.backR = balc[i + 1] ? (r.R + balc[i + 1].R) / 2 : null; });
-  const byId = new Map(seats.map((s) => [s.id, s]));
-  const lay = { key: hallKey, ...spec, rows, main, balc, seats, byId };
+  main.forEach((r, i) => { r.frontR = main[i - 1] ? (main[i - 1].R + r.R) / 2 : r.R - 0.75; r.backR = main[i + 1] ? (r.R + main[i + 1].R) / 2 : (lay.balcony ? lay.balcony.frontZ - CZ : back - CZ + 50); });
+  balc.forEach((r, i) => { r.frontR = balc[i - 1] ? (balc[i - 1].R + r.R) / 2 : lay.balcony.frontZ - CZ + 0.3; r.backR = balc[i + 1] ? (r.R + balc[i + 1].R) / 2 : null; });
+  Object.assign(lay, { rows, main, balc, seats, disabled, byId: new Map(seats.map((s) => [s.id, s])) });
   for (const s of seats) Object.assign(s, viewScore(s, lay));
-  cache.set(hallKey, lay);
+  cache.set(key, lay);
   return lay;
 }
 
@@ -114,14 +174,15 @@ export function viewScore(seat, lay) {
   const side = Math.abs(Math.atan2(dx, dz)) * 57.3;
   const up = Math.atan2(lay.screen.y - eyeY, dz) * 57.3;
   let s = 100;
-  s -= Math.max(0, 0.9 - ratio) * 110;
+  // Comfortable: 0.75–1.9 screen widths away, under ~12° looking up, small side angle
+  s -= Math.max(0, 0.75 - ratio) * 120;
   s -= Math.max(0, ratio - 1.9) * 35;
-  s -= Math.max(0, side - 7) * 1.5;
-  s -= Math.max(0, up - 9) * 2.6;
+  s -= Math.max(0, side - 8) * 1.4;
+  s -= Math.max(0, up - 12) * 2.4;
   s -= Math.max(0, -up - 14) * 1.2;
   const score = Math.max(8, Math.min(100, Math.round(s)));
   let note = 'centre';
-  if (ratio < 0.9) note = 'close'; else if (up > 14) note = 'neck'; else if (side > 22) note = 'side'; else if (ratio > 1.9) note = 'far';
+  if (ratio < 0.75) note = 'close'; else if (up > 16) note = 'neck'; else if (side > 22) note = 'side'; else if (ratio > 1.9) note = 'far';
   return { score, ratio, side, up, note };
 }
 export function scoreLabel(score) {
@@ -138,14 +199,14 @@ export function scoreHex(score) {
   return '#' + a.map((v, i) => Math.round(v + (b[i] - v) * k).toString(16).padStart(2, '0')).join('');
 }
 
-// Which seats are taken for a show (deterministic) plus seats booked on this device
+// Which seats are taken for a show (deterministic), plus blocked seats and seats booked on this device
 export function bookedFor(show, lay, extra = []) {
   const r = mulberry32(hash(show.id + 'seats'));
-  const set = new Set(extra);
+  const set = new Set([...extra, ...lay.disabled]);
   for (const row of lay.rows) {
     const half = row.half + 0.01;
     for (const s of row.seats) {
-      if (row.pair && s.k % 2) continue;
+      if (s.partner && s.partner.num < s.num) continue;
       const central = 1 - Math.abs(s.s) / half;
       const p = show.occ * (0.55 + 0.75 * central) * (s.score > 75 ? 1.15 : 0.85);
       if (r() < p) { set.add(s.id); if (s.partner) set.add(s.partner.id); }
@@ -161,7 +222,7 @@ export function bestBlock(lay, booked, n, cls = null) {
     if (cls && row.cls !== cls) continue;
     const need = row.pair ? n + (n % 2) : n;
     for (const b of row.blocks) for (let i = 0; i + need <= b.length; i++) {
-      if (row.pair && i % 2) continue;
+      if (row.pair && b[i].partner && b[i].partner.k < b[i].k) continue;
       const run = b.slice(i, i + need);
       if (run.some((x) => booked.has(x.id))) continue;
       const score = run.reduce((a, x) => a + x.score, 0) / need - (row.pair && need > n ? 3 : 0);
@@ -176,7 +237,7 @@ export function blockAround(lay, booked, seat, n) {
   const need = row.pair ? n + (n % 2) : n;
   let best = null;
   for (let i = Math.max(0, seat.k - need + 1); i <= seat.k && i + need <= b.length; i++) {
-    if (row.pair && i % 2) continue;
+    if (row.pair && b[i].partner && b[i].partner.k < b[i].k) continue;
     const run = b.slice(i, i + need);
     if (run.some((x) => booked.has(x.id))) continue;
     const d = Math.abs(i - seat.k);
@@ -184,4 +245,16 @@ export function blockAround(lay, booked, seat, n) {
   }
   return best ? best.run : null;
 }
-export function priceOf(seat, hallKey) { return HALLS[hallKey].prices[seat.cls]; }
+
+// Plan text <-> spec rows, for the admin editor
+export function rowsToText(rows) { return rows.map((r) => `${r.r} ${r.cls} ${r.plan}`).join('\n'); }
+export function textToRows(text) {
+  const out = [], errors = [];
+  text.split('\n').map((l) => l.trim()).filter(Boolean).forEach((line, i) => {
+    const m = /^([A-Za-z]{1,2})\s+([a-z]+)\s+([0-9SRWXsrwx._]+)$/.exec(line);
+    if (!m) { errors.push(`Line ${i + 1}: write it like "A classic 4_12_4"`); return; }
+    out.push({ r: m[1].toUpperCase(), cls: m[2], plan: m[3] });
+  });
+  return { rows: out, errors };
+}
+export function specOfHall(hallKey) { return JSON.parse(JSON.stringify({ ...HALLS[hallKey].spec, prices: HALLS[hallKey].prices, base: hallKey })); }

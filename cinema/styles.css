@@ -251,6 +251,7 @@ h1, h2, h3 { text-wrap: balance; margin: 0; }
 .m-seat:hover { transform: translate(-50%, -50%) rotate(var(--rot)) scale(1.25); z-index: 2; }
 .m-seat.is-booked { background: var(--sold); color: var(--sold-ink); cursor: not-allowed; box-shadow: none; }
 .m-seat.is-picked { background: var(--red); color: #fff; box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 30%, transparent); z-index: 1; }
+.m-seat.is-off { background: transparent; box-shadow: inset 0 0 0 1.5px var(--sold); color: var(--sold-ink); }
 .m-seat.is-best:not(.is-booked):not(.is-picked) { outline: 2px solid var(--fg); outline-offset: 1px; }
 .m-seat.is-acc { background: var(--paper); color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--ink); }
 .m-seat svg.i { width: 72%; height: 72%; stroke-width: 2.6; }
@@ -489,3 +490,32 @@ h1, h2, h3 { text-wrap: balance; margin: 0; }
   .hero-art { width: 70%; opacity: 0.55; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* Seat layout editor */
+.for-theatres { margin-top: 26px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 14px 16px; border-radius: 16px; border: 1px dashed var(--line); background: var(--card); }
+.for-theatres span { display: grid; } .for-theatres small { color: var(--muted); }
+.admin-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; }
+.ad-form details { border-top: 1px solid var(--line); padding-top: 10px; }
+.ad-form summary { cursor: pointer; font-weight: 800; font-size: 15px; padding: 4px 0 8px; }
+.ad-form { min-width: 0; }
+.af-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.af-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.af { display: grid; gap: 4px; font-size: 13px; color: var(--muted); font-weight: 600; }
+.af.chk { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; color: var(--fg); }
+.af .dd select { width: 100%; }
+.af-in { display: flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-2); padding: 0 10px; }
+.af-in input { flex: 1; min-width: 0; min-height: 40px; border: 0; background: none; color: var(--fg); font: inherit; font-size: 15px; font-variant-numeric: tabular-nums; }
+.af-in input:focus { outline: none; }
+.af-in:focus-within { border-color: var(--teal); }
+.af input:not([type]), .af-row .input { min-height: 40px; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
+.hint { margin: 0 0 8px; font-size: 13px; color: var(--muted); }
+.hint code, .err code { font-size: 12px; padding: 1px 5px; border-radius: 5px; background: var(--card-2); color: var(--fg); }
+.mono { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 14px; line-height: 1.6; padding: 10px 12px; min-height: 180px; resize: vertical; }
+.err { color: var(--red); font-size: 13px; margin: 6px 0 0; min-height: 1em; }
+.gen { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; font-size: 13px; color: var(--muted); }
+.gen input { min-height: 36px; width: 60px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg-2); color: var(--fg); padding: 0 8px; font: inherit; }
+.ad-preview { display: grid; gap: 12px; }
+.ad-preview .map-scroll { max-height: 62vh; }
+.ad3d { display: block; aspect-ratio: 16 / 9; }
+@media (min-width: 1100px) { .admin-grid { grid-template-columns: minmax(0, 440px) minmax(0, 1fr); } .ad-preview { position: sticky; top: 120px; } }

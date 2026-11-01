@@ -4,10 +4,11 @@ import {
   movieById, eventById, premiereById, isNowShowing, theatresFor, theatreById, showsFor, showById, today, addDays, dayKey, fromKey,
   hmLabel, partOfDay, releaseDate, mulberry32, hash,
 } from './data.js';
-import { HALLS, getLayout, bookedFor, bestBlock, blockAround, scoreLabel, scoreColor } from './layout.js';
+import { HALLS, getLayout, buildLayout, layoutOf, pricesOf, layoutFor, pricesFor, hallName, setCustomLayouts, customFor, specOfHall, rowsToText, textToRows, parsePlan, REC_CLASSES, bookedFor, bestBlock, blockAround, scoreLabel, scoreColor } from './layout.js';
 import { mountMap } from './map2d.js';
 import { t, tx, state, icon, inr, esc, clsName, poster, $, $$, toast, fmtDate, compact, deviceTier } from './ui.js';
 import { createAgent } from './agent.js';
+import { adminView as renderAdmin } from './admin.js';
 
 const TIER = deviceTier();
 const view = $('#view');
@@ -25,6 +26,8 @@ const S = {
   langFilter: 'all',
 };
 const holds = new Map(); // showId -> { seats, until }
+S.layouts = store.get('layouts', {});
+setCustomLayouts(S.layouts);
 let cleanup = [];
 const onLeave = (fn) => cleanup.push(fn);
 const money = (v) => '₹' + (Math.round(v * 100) / 100).toLocaleString('en-IN', { minimumFractionDigits: v % 1 ? 2 : 0, maximumFractionDigits: 2 });
@@ -86,6 +89,8 @@ function route() {
   if ((m = /^cat-([a-z]+)$/.exec(h))) return catView(m[1]);
   if ((m = /^event-([a-z0-9]+)$/.exec(h))) return eventView(m[1]);
   if ((m = /^premiere-([a-z0-9]+)$/.exec(h))) return premiereView(m[1]);
+  if (h === 'admin') return adminView(null);
+  if ((m = /^admin-(c\d+t\d+s\d+)$/.exec(h))) return adminView(m[1]);
   homeView();
 }
 
@@ -134,7 +139,8 @@ function homeView() {
     <section class="row"><div class="row-h"><h2>${state.lang === 'ta' ? 'நேரலை நிகழ்வுகள்' : 'Live events'}</h2></div><div class="rail">${EVENT_CATS.map((c) => `<a class="ecard" href="#cat-${c.id}" style="--c1:${c.c1};--c2:${c.c2}"><span class="e-ic">${icon(c.icon)}</span><b>${esc(tx(c))}</b><small>${catCount(c.id)}+ ${state.lang === 'ta' ? 'நிகழ்வுகள்' : 'events'}</small></a>`).join('')}</div></section>
     ${row(t('family'), now.filter((m) => m.genres.some((g) => ['Family', 'Animation', 'Comedy'].includes(g))).map((m) => card(m)))}
     ${row('Premiere', PREMIERES.map((p) => card(p, `#premiere-${p.id}`, 'PREMIERE')), state.lang === 'ta' ? 'வீட்டிலேயே புதுப் படங்கள்' : 'New movies to watch at home')}
-    <section class="row"><div class="row-h"><h2>${t('near')}</h2></div><div class="rail">${ths.map(theatreCard).join('')}</div></section>`;
+    <section class="row"><div class="row-h"><h2>${t('near')}</h2></div><div class="rail">${ths.map(theatreCard).join('')}</div></section>
+    <a class="for-theatres" href="#admin">${icon('grid')}<span><b>${state.lang === 'ta' ? 'திரையரங்குகளுக்கு' : 'For theatres'}</b><small>${state.lang === 'ta' ? 'உங்கள் திரையின் இருக்கை அமைப்பை அமைக்கவும்' : 'Set up the real seat layout of each screen'}</small></span>${icon('right')}</a>`;
   view.querySelector('.filters').addEventListener('click', (e) => { const b = e.target.closest('[data-lang]'); if (!b) return; S.langFilter = b.dataset.lang; homeView(); });
   if (!S.city) setTimeout(() => openCitySheet(true), 300);
 }
@@ -220,7 +226,7 @@ function showsView(id) {
     <div class="legend-line"><span><i style="background:var(--ok)"></i>${t('avail').toUpperCase()}</span><span><i style="background:var(--warn)"></i>${t('fast').toUpperCase()}</span><span><i style="background:var(--bad)"></i>${t('almost').toUpperCase()}</span></div>
     <div id="theatreList"></div>`;
   const list = $('#theatreList');
-  const lowPrice = (s) => Math.min(...Object.values(HALLS[s.hall].prices));
+  const lowPrice = (s) => Math.min(...Object.values(pricesOf(s)));
   function renderList() {
     let shows = showsFor({ cityId: app.city(), dk: SF.dk, movieId: m.id }).filter((s) => s.lang === SF.lang || !(m.langs || []).length);
     shows = shows.filter((s) => (SF.fmt === 'all' || s.fmt === SF.fmt)
@@ -269,12 +275,12 @@ function theatreView(id) {
     <div class="tags">${th.amen.map((a) => `<span class="tag">${esc(a)}</span>`).join('')}</div></section>
     <h2 class="sec">${t('screens')}</h2>
     <div class="screens">${th.screens.map((sc) => {
-      const lay = getLayout(sc.hall);
+      const lay = layoutFor(sc.id, sc.hall);
       const ss = shows.filter((s) => s.screenIdx === sc.idx);
       return `<article class="screen-card"><div class="sc-map">${hallGlyph(sc.hall)}</div>
-        <div class="sc-body"><b>${esc(sc.name)} · ${esc(sc.fmt)}</b><small>${esc(tx(HALLS[sc.hall]))} · ${lay.seats.length} seats · ${lay.rows.length} rows · screen ${lay.screen.w} m wide</small>
-        <div class="prices">${Object.entries(HALLS[sc.hall].prices).map(([k, p]) => `<span><i style="background:${CLASS_META[k].color}"></i>${esc(clsName(k))} ${inr(p)}</span>`).join('')}</div>
-        <button type="button" class="btn ghost sm" data-explore="${sc.idx}">${icon('cube')}${t('explore')}</button>
+        <div class="sc-body"><b>${esc(sc.name)} · ${esc(sc.fmt)}</b><small>${esc(tx(hallName(sc.id, sc.hall)))}${customFor(sc.id) ? ' · custom layout' : ''} · ${lay.seats.length} seats · ${lay.rows.length} rows · screen ${lay.screen.w} m wide</small>
+        <div class="prices">${Object.entries(pricesFor(sc.id, sc.hall)).map(([k, p]) => `<span><i style="background:${CLASS_META[k].color}"></i>${esc(clsName(k))} ${inr(p)}</span>`).join('')}</div>
+        <span class="mh-cta"><button type="button" class="btn ghost sm" data-explore="${sc.idx}">${icon('cube')}${t('explore')}</button><a class="btn ghost sm" href="#admin-${sc.id}">${icon('grid')}${state.lang === 'ta' ? 'இருக்கை அமைப்பைத் திருத்து' : 'Edit seat layout'}</a></span>
         ${ss.length ? `<div class="times">${ss.map((s) => `<a class="time avail" href="#show-${s.id}"><b>${hmLabel(s.hm)}</b><small>${esc(movieById(s.movieId).title)}</small></a>`).join('')}</div>` : ''}</div></article>`;
     }).join('')}</div>`;
   $('#thBack').addEventListener('click', () => (history.length > 1 ? history.back() : (location.hash = 'home')));
@@ -282,7 +288,7 @@ function theatreView(id) {
     const b = e.target.closest('[data-explore]'); if (!b) return;
     const sc = th.screens[+b.dataset.explore];
     const s = shows.find((x) => x.screenIdx === sc.idx);
-    const lay = getLayout(sc.hall);
+    const lay = layoutFor(sc.id, sc.hall);
     openViewer({ lay, movie: s ? movieById(s.movieId) : MOVIES[0], booked: s ? bookedFor(s, lay, app.mySeats(s.id)) : new Set(), selected: new Set(), seat: null, title: `${th.name} · ${sc.name}` });
   });
 }
@@ -299,8 +305,8 @@ const vehicleFor = (n) => VEHICLES[n <= 1 ? 0 : n === 2 ? 1 : n === 3 ? 2 : n <=
 function seatsView(showId) {
   const show = showById(showId);
   if (!show) { toast('This show has already started or is no longer available.'); return homeView(); }
-  const m = movieById(show.movieId), th = theatreById(show.theatreId), lay = getLayout(show.hall);
-  const prices = HALLS[show.hall].prices;
+  const m = movieById(show.movieId), th = theatreById(show.theatreId), lay = layoutOf(show);
+  const prices = pricesOf(show);
   const booked = bookedFor(show, lay, app.mySeats(show.id));
   const selected = new Set();
   let count = 0, focus = null, viewMode = 'class';
@@ -469,7 +475,7 @@ $('#vwPresets').addEventListener('click', (e) => { const b = e.target.closest('[
 
 /* ---------- orders: movie, event or rental ---------- */
 function movieOrder(show, seats, snacks) {
-  const lay = getLayout(show.hall), prices = HALLS[show.hall].prices, m = movieById(show.movieId), th = theatreById(show.theatreId);
+  const lay = layoutOf(show), prices = pricesOf(show), m = movieById(show.movieId), th = theatreById(show.theatreId);
   const list = seats.map((id) => lay.byId.get(id));
   const lines = [...new Set(list.map((s) => s.cls))].map((k) => { const l = list.filter((s) => s.cls === k); return { label: `${clsName(k)} × ${l.length}`, sub: l.map((s) => s.id).join(', '), amount: prices[k] * l.length }; });
   return { kind: 'movie', showId: show.id, seats, snacks, qty: seats.length, lines, title: m.title, c1: m.c1, c2: m.c2,
@@ -656,16 +662,16 @@ function refundFor(b) {
   if (b.kind !== 'movie') return null;
   const show = showById(b.showId); if (!show) return null;
   const hrs = (showStart(show) - Date.now()) / 3600000;
-  const lay = getLayout(show.hall), prices = HALLS[show.hall].prices;
-  const ticket = b.seats.reduce((a, id) => a + prices[lay.byId.get(id).cls], 0);
+  const lay = layoutOf(show), prices = pricesOf(show);
+  const ticket = b.seats.reduce((a, id) => a + (prices[lay.byId.get(id)?.cls] || 0), 0);
   const pct = hrs > 4 ? 0.75 : hrs > 2 ? 0.5 : 0;
   return { pct, amount: Math.round(ticket * pct) };
 }
 function ticketInfo(b) {
   if (b.kind === 'movie') {
     const show = showById(b.showId); if (!show) return null;
-    const m = movieById(show.movieId), th = theatreById(show.theatreId), lay = getLayout(show.hall);
-    const avg = Math.round(b.seats.reduce((a, id) => a + lay.byId.get(id).score, 0) / b.seats.length);
+    const m = movieById(show.movieId), th = theatreById(show.theatreId), lay = layoutOf(show);
+    const avg = Math.round(b.seats.reduce((a, id) => a + (lay.byId.get(id)?.score || 0), 0) / b.seats.length);
     return { m, title: m.title, when: `${fmtDate(fromKey(show.dk))} · ${hmLabel(show.hm)}`, where: `${th.name}, ${th.area} · ${th.screens[show.screenIdx].name}`,
       rows: [['Seats', b.seats.join(', ')], [t('score'), `${avg}/100`], ['Format', `${show.lang} · ${show.fmt}`], ['Ends', endTime(show.hm, m.mins)]], show, lay, th };
   }
@@ -705,7 +711,7 @@ function ticketView(id) {
   const q = $('.qr', view); if (q) drawQR(q, b.id);
   $('#tkView')?.addEventListener('click', () => {
     const sel = new Set(b.seats);
-    openViewer({ lay: info.lay, movie: info.m, booked: bookedFor(info.show, info.lay, app.mySeats(info.show.id).filter((x) => !sel.has(x))), selected: sel, seat: info.lay.byId.get(b.seats[Math.floor(b.seats.length / 2)]), title: `${info.title} · ${b.seats.join(', ')}` });
+    openViewer({ lay: info.lay, movie: info.m, booked: bookedFor(info.show, info.lay, app.mySeats(info.show.id).filter((x) => !sel.has(x))), selected: sel, seat: info.lay.byId.get(b.seats[Math.floor(b.seats.length / 2)]) || null, title: `${info.title} · ${b.seats.join(', ')}` });
   });
   $('#tkWatch')?.addEventListener('click', () => {
     const lay = getLayout('lounge');
@@ -762,6 +768,11 @@ function premiereView(id) {
       <div class="mh-cta">${owned ? `<a class="btn primary" href="#ticket-${owned.id}">${icon('play')}${state.lang === 'ta' ? 'இப்போது பார்' : 'Watch now'}</a>` : `<button type="button" class="btn primary" id="rentBtn">${state.lang === 'ta' ? 'வாடகை' : 'Rent'} ${inr(p.rent)}</button>`}</div>
       <p class="muted" style="margin:0;font-size:13px">${state.lang === 'ta' ? '30 நாட்களுக்குள் தொடங்குங்கள்; தொடங்கியதும் 48 மணி நேரம்.' : 'Start within 30 days. You get 48 hours once you start.'}</p></div></section>`;
   $('#rentBtn')?.addEventListener('click', () => contactStep(rentOrder(p)));
+}
+
+/* ---------- seat layout editor ---------- */
+function adminView(id) {
+  renderAdmin(view, id, { city: app.city, S, store, tier: TIER, onLeave, openSheet, closeSheet, refreshForm: null });
 }
 
 /* ---------- sheets: city, search, generic ---------- */
