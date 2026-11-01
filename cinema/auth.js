@@ -21,7 +21,10 @@ function setErr(root, id, msg) { const e = root.querySelector(`[data-for="${id}"
 function bindEyes(root) { root.addEventListener('click', (e) => { const b = e.target.closest('[data-eye]'); if (!b) return; const i = root.querySelector('#' + b.dataset.eye); i.type = i.type === 'password' ? 'text' : 'password'; }); }
 async function busy(btn, fn) { const old = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="spin sm"></span>'; try { return await fn(); } finally { btn.disabled = false; btn.innerHTML = old; } }
 function needServer(view) {
-  view.innerHTML = shell(L('Sign-in needs the Lumen server'), '', `<div class="notice">${icon('lock')}<span>Partner and admin accounts are stored on the server. On your computer, double-click <b>start.bat</b> (or run <code>node server.js</code> in the cinema folder) and open <b>http://127.0.0.1:5500</b>.</span></div><a class="btn ghost" href="#home">${icon('back')}Back to movies</a>`);
+  view.innerHTML = shell(L('Sign-in needs the Lumen server'), '', `<div class="notice">${icon('lock')}${/^(127\.0\.0\.1|localhost)$/.test(location.hostname) ? `<span>This page is being served by a plain file server (VS Code Live Server or Python), so sign-in, uploads and banners can't work.</span></div>
+  <ol class="fix-steps"><li>Stop that server: in VS Code click <b>Port: ${location.port || 5500}</b> in the bottom bar, or press <b>Ctrl+C</b> in the Python window.</li>
+  <li>Double-click <b>start.bat</b> in the <b>cinema</b> folder and keep its black window open.</li>
+  <li>Open <b>http://127.0.0.1:5500/#login</b>. The address must <b>not</b> contain <code>/cinema/</code>.</li></ol>` : `<span>This online preview has no server, so partner and admin sign-in are turned off. Run Lumen on your computer with <b>start.bat</b> to use them.</span></div>`}<a class="btn ghost" href="#home">${icon('back')}Back to movies</a>`);
 }
 
 /* ---------- sign in ---------- */
