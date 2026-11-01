@@ -5,7 +5,7 @@ import { gate, openAccount } from './auth.js';
 import { receiptsTable, rupees, fmtDay } from './billing.js';
 import { uploadBox, bindUpload, bannerPreview, bannerState, STATUS } from './media.js';
 
-const TABS = [['overview', 'Overview'], ['partners', 'Partners'], ['theatres', 'Theatres'], ['movies', 'Movies'], ['banners', 'Banners'], ['offers', 'Offers'], ['fees', 'Fees'], ['bookings', 'Bookings']];
+const TABS = [['overview', 'Overview'], ['partners', 'Partners'], ['theatres', 'Theatres'], ['movies', 'Movies'], ['banners', 'Banners'], ['offers', 'Offers'], ['fees', 'Fees & plans'], ['bookings', 'Bookings'], ['messages', 'Messages'], ['settings', 'Settings']];
 const USER_ST = { unverified: ['Email not verified', 'warn'], pending: ['Waiting for approval', 'warn'], active: ['Active', 'ok'], rejected: ['Rejected', 'bad'], disabled: ['Turned off', 'bad'] };
 const money = (v) => '₹' + (Math.round(v * 100) / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 });
 const chip = (label, tone) => `<span class="st st-${tone}">${esc(label)}</span>`;
@@ -14,24 +14,26 @@ const LANGS = ['Tamil', 'English', 'Telugu', 'Hindi', 'Malayalam', 'Kannada'];
 const CERTS = ['U', 'U/A 7+', 'U/A 13+', 'U/A 16+', 'A'];
 const MOTIFS = ['sun', 'waves', 'leaf', 'stars', 'flame', 'arc', 'moon', 'road'];
 
-let usersCache = null;
+let usersCache = null, msgCache = [];
 export async function consoleView(view, tab, ctx) {
   const u = gate(view, ctx, 'admin', 'console' + (tab !== 'overview' ? '-' + tab : ''));
   if (!u) return;
   if (!TABS.some(([k]) => k === tab)) tab = 'overview';
   const pending = CITIES.flatMap((c) => theatresFor(c.id, { all: true })).filter((t) => (ctx.db.state.theatres[t.id]?.kycStatus) === 'pending').length;
   const bnPending = ctx.db.state.banners.filter((b) => b.status === 'pending').length;
-  try { [usersCache] = await Promise.all([ctx.db.users(), ctx.db.refresh()]); } catch (e) { usersCache = usersCache || []; }
+  let msgs = [];
+  try { [usersCache, msgs] = await Promise.all([ctx.db.users(), ctx.db.messages(), ctx.db.refresh()]); } catch (e) { usersCache = usersCache || []; }
+  msgCache = msgs || [];
   if (!ctx.isCurrent()) return;
   const ptPending = usersCache.filter((x) => x.status === 'pending').length;
-  const cnt = { theatres: pending, banners: bnPending, partners: ptPending };
+  const cnt = { theatres: pending, banners: bnPending, partners: ptPending, messages: msgCache.filter((x) => x.status === 'open').length };
   view.innerHTML = `
     <div class="topbar"><a class="iconbtn" href="#home" aria-label="Back">${icon('back')}</a><div class="sb-t"><b>Lumen admin console</b><small>${esc(u.name)} · ${esc(u.email)}</small></div>
       <button type="button" class="btn ghost sm" id="acct">${icon('user')}<span class="hide-sm">Account</span></button></div>
     <nav class="tabs" aria-label="Admin sections">${TABS.map(([k, l]) => `<a href="#console-${k}" ${k === tab ? 'aria-current="page"' : ''}>${l}${cnt[k] ? ` <i class="cnt">${cnt[k]}</i>` : ''}</a>`).join('')}</nav>
     <div id="ac"></div>`;
   $('#acct').addEventListener('click', () => openAccount(ctx));
-  ({ overview, partners, theatres, movies, banners, offers, fees, bookings })[tab]($('#ac'), ctx);
+  ({ overview, partners, theatres, movies, banners, offers, fees, bookings, messages, settings })[tab]($('#ac'), ctx);
 }
 async function save(ctx, section, value, msg) {
   try { await ctx.db.put(section, value); toast(msg); ctx.route(); return true; }
@@ -115,6 +117,7 @@ function overview(host, ctx) {
       <div class="tile"><small>Lumen revenue</small><b>${money(sum('platform'))}</b><span>Booking fees after offers, excl. GST</span></div>
       <div class="tile"><small>GST on fees</small><b>${money(sum('gst'))}</b><span>To be filed</span></div>
       <div class="tile"><small>Owed to theatres</small><b>${money(sum('theatre'))}</b><span>Tickets + food after refunds</span></div>
+      <div class="tile"><small>Commission from theatres</small><b>${money(sum('commission'))}</b><span>${ctx.db.state.fees?.commissionPct ?? 0.5}% of ticket sales</span></div>
       <div class="tile"><small>Partner plans</small><b>${money((ctx.db.state.payments || []).filter((x) => x.status === 'paid' && x.gateway !== 'demo').reduce((a, x) => a + x.amount, 0))}</b><span>${(ctx.db.state.payments || []).filter((x) => x.status === 'paid').length} payments${(ctx.db.state.payments || []).some((x) => x.gateway === 'demo') ? ' (demo ones not counted)' : ''}</span></div>
       <div class="tile"><small>Donations</small><b>${money(sum('donation'))}</b><span>For young musicians</span></div>
     </div>
@@ -240,6 +243,74 @@ function mediaSheet(id, ctx) {
   render();
 }
 
+/* ---------- contact messages ---------- */
+function messages(host, ctx) {
+  let filter = 'open';
+  const render = () => {
+    const list = msgCache.filter((x) => filter === 'all' || x.status === filter);
+    host.innerHTML = `<div class="sec-row"><h2 class="sec">Messages from the website</h2><div class="filters">${[['open', 'New'], ['replied', 'Replied'], ['closed', 'Closed'], ['all', 'All']].map(([k, l]) => `<button type="button" class="fchip" data-f="${k}" aria-pressed="${filter === k}">${l} (${k === 'all' ? msgCache.length : msgCache.filter((x) => x.status === k).length})</button>`).join('')}</div></div>
+      ${list.length ? `<div class="msg-list">${list.map((x) => `<article class="msg-item"><header><b>${esc(x.name)}</b><span class="muted">${esc(x.email)}${x.phone ? ' · +91 ' + esc(x.phone) : ''}</span>${chip(x.topic, 'warn')}${x.bookingId ? chip('Booking ' + x.bookingId, 'warn') : ''}<small class="muted">${new Date(x.at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</small></header>
+        <p class="msg-text">${esc(x.message)}</p>${x.replies.map((r) => `<p class="msg-reply"><small>${esc(r.by)} · ${new Date(r.at).toLocaleString('en-IN')}</small>${esc(r.text)}</p>`).join('')}
+        <div class="msg-act"><textarea class="input" rows="2" placeholder="Write a reply. It is emailed to ${esc(x.email)}" data-reply="${x.id}" style="padding:8px 10px"></textarea>
+        <span class="acts"><button type="button" class="btn primary sm" data-send="${x.id}">${icon('send')}Send reply</button><button type="button" class="btn ghost sm" data-st="${x.status === 'closed' ? 'open' : 'close'}" data-id="${x.id}">${x.status === 'closed' ? 'Reopen' : 'Close'}</button></span></div></article>`).join('')}</div>` : '<p class="empty">No messages here.</p>'}`;
+    host.querySelector('.filters').addEventListener('click', (e) => { const b = e.target.closest('[data-f]'); if (b) { filter = b.dataset.f; render(); } });
+    host.querySelectorAll('[data-send]').forEach((b) => b.addEventListener('click', async () => {
+      const text = host.querySelector(`[data-reply="${b.dataset.send}"]`).value.trim(); if (text.length < 2) { toast('Write your reply first.'); return; }
+      b.disabled = true;
+      try { const r = await ctx.db.messageAction(b.dataset.send, 'reply', text); Object.assign(msgCache.find((x) => x.id === b.dataset.send), r.message); toast('Reply emailed.'); render(); }
+      catch (e) { toast(e.message); b.disabled = false; }
+    }));
+    host.querySelectorAll('[data-st]').forEach((b) => b.addEventListener('click', async () => {
+      try { const r = await ctx.db.messageAction(b.dataset.id, b.dataset.st); Object.assign(msgCache.find((x) => x.id === b.dataset.id), r.message); render(); } catch (e) { toast(e.message); }
+    }));
+  };
+  render();
+}
+
+/* ---------- keys & settings ---------- */
+async function settings(host, ctx) {
+  host.innerHTML = '<div class="spin"></div>';
+  let st; try { st = await ctx.db.settings(); } catch (e) { host.innerHTML = `<p class="err">${esc(e.message)}</p>`; return; }
+  if (!ctx.isCurrent()) return;
+  const f = (g, k, label, hint = '', type = 'text', ph = '') => `<label class="af"><span>${esc(label)}${hint ? `<small class="muted"> · ${hint}</small>` : ''}</span><input class="input" data-g="${g}" data-k="${k}" type="${type}" value="${esc(st[g][k] || '')}" placeholder="${esc(ph)}" autocomplete="off" spellcheck="false"></label>`;
+  const secret = (g, k, label, hint) => f(g, k, label, hint || (st[g][k] ? 'saved; type a new one to change it' : ''), 'password', st[g][k] ? '' : 'not set');
+  const test = (kind, label, ph) => `<div class="test-row"><input class="input" data-test-to="${kind}" placeholder="${esc(ph)}"><button type="button" class="btn ghost sm" data-test="${kind}">${icon('send')}${esc(label)}</button></div>`;
+  host.innerHTML = `<p class="hint">Keys and passwords are stored on the server and never shown again in full. They take effect right away.</p>
+  <div class="pt-cols">
+    <section class="panel"><h2>Payments · Razorpay</h2><p class="muted">Razorpay Dashboard → Account & Settings → API Keys. Use <b>test</b> keys first.</p>
+      ${f('razorpay', 'keyId', 'Key ID', '', 'text', 'rzp_test_…')}${secret('razorpay', 'keySecret', 'Key secret')}
+      ${test('razorpay', 'Check keys', 'Creates a ₹1 test order')}</section>
+    <section class="panel"><h2>Email · SMTP</h2><p class="muted">Gmail: host smtp.gmail.com, port 465, your Gmail, and an App password.</p>
+      <div class="af-grid">${f('smtp', 'host', 'SMTP host', '', 'text', 'smtp.gmail.com')}${f('smtp', 'port', 'Port', '465 or 587', 'text', '465')}</div>
+      ${f('smtp', 'user', 'Username / email')}${secret('smtp', 'pass', 'Password / App password')}${f('smtp', 'from', 'Send from', 'shown to customers')}
+      ${test('email', 'Send test email', 'your@email.com')}</section>
+    <section class="panel"><h2>WhatsApp tickets · Meta Cloud API</h2><p class="muted">WhatsApp Manager → API setup. Create a <b>utility</b> template with 5 variables: {{1}} booking ID, {{2}} movie, {{3}} date & time, {{4}} theatre, {{5}} seats.</p>
+      ${secret('whatsapp', 'token', 'Access token')}<div class="af-grid">${f('whatsapp', 'phoneId', 'Phone number ID')}${f('whatsapp', 'lang', 'Template language', '', 'text', 'en')}</div>
+      <div class="af-grid">${f('whatsapp', 'ticketTemplate', 'Ticket template name', '', 'text', 'lumen_ticket')}${f('whatsapp', 'otpTemplate', 'Login code template (optional)', 'authentication type')}</div>
+      ${test('whatsapp', 'Send test ticket', '10-digit mobile')}</section>
+    <section class="panel"><h2>Login codes by SMS · MSG91</h2><p class="muted">MSG91 → OTP template (DLT approved). Without SMS, codes go by WhatsApp if a login template is set, else they are printed in the server window.</p>
+      ${secret('sms', 'authKey', 'Auth key')}${f('sms', 'templateId', 'OTP template ID')}
+      ${test('sms', 'Send test code', '10-digit mobile')}</section>
+    <section class="panel"><h2>Contact & business details</h2><p class="muted">Shown on the contact page, invoices and policies. New website messages are emailed to this address.</p>
+      ${f('contact', 'company', 'Business name', '', 'text', 'Lumen Cinemas')}${f('contact', 'email', 'Support email')}${f('contact', 'phone', 'Support phone / WhatsApp')}${f('contact', 'address', 'Address')}</section>
+  </div>
+  <p class="err" id="sErr"></p><div class="sh-actions sticky-save"><button type="button" class="btn primary" id="sSave">${icon('check')}Save settings</button></div>`;
+  const collect = () => { const v = {}; host.querySelectorAll('[data-g]').forEach((i) => { (v[i.dataset.g] ||= {})[i.dataset.k] = i.value; }); return v; };
+  $('#sSave').addEventListener('click', async () => {
+    try { st = await ctx.db.saveSettings(collect()); toast('Settings saved.'); await ctx.db.refresh(); ctx.route(); } catch (e) { $('#sErr').textContent = e.message; }
+  });
+  host.querySelectorAll('[data-test]').forEach((b) => b.addEventListener('click', async () => {
+    const kind = b.dataset.test, to = host.querySelector(`[data-test-to="${kind}"]`).value.trim();
+    b.disabled = true;
+    try {
+      await ctx.db.saveSettings(collect());
+      const r = await ctx.db.testSetting(kind, to);
+      toast(kind === 'razorpay' ? `Razorpay keys work (test order ${r.order}).` : r.sent ? 'Sent. Check the phone or inbox.' : 'Not set up yet: the message was printed in the server window.');
+    } catch (e) { toast(e.message); }
+    b.disabled = false;
+  }));
+}
+
 /* ---------- offers ---------- */
 function offers(host, ctx) {
   const list = ctx.db.state.offers || baseOffers().map((o) => ({ ...o, active: true }));
@@ -282,12 +353,13 @@ function offers(host, ctx) {
 
 /* ---------- fees ---------- */
 function fees(host, ctx) {
-  const f = { conv: 18, gst: 0.18, holdMinutes: 5, demoCrowd: true, ...(ctx.db.state.fees || {}) };
-  const pb = { monthly: 399, yearlyList: 5000, yearlyOffPct: 20, graceDays: 7, ...(ctx.db.state.billing || {}) };
+  const f = { conv: 18, gst: 0, holdMinutes: 5, demoCrowd: true, commissionPct: 0.5, ...(ctx.db.state.fees || {}) };
+  const pb = { monthly: 399, yearlyList: 5000, yearlyOffPct: 20, graceDays: 7, trialDays: 14, gstPct: 0, ...(ctx.db.state.billing || {}) };
   host.innerHTML = `<section class="panel narrow"><h2>Fees & rules</h2>
     <form id="feeForm" class="pt-form" novalidate>
       <div class="af-grid"><label class="af"><span>Booking fee per ticket</span><span class="af-in"><small>₹</small><input type="number" name="conv" min="0" max="200" step="1" value="${f.conv}"></span></label>
-        <label class="af"><span>GST on booking fee</span><span class="af-in"><input type="number" name="gst" min="0" max="28" step="1" value="${Math.round(f.gst * 100)}"><small>%</small></span></label></div>
+        <label class="af"><span>GST on booking fee (0 until Lumen has a GSTIN)</span><span class="af-in"><input type="number" name="gst" min="0" max="28" step="1" value="${Math.round(f.gst * 100)}"><small>%</small></span></label></div>
+      <label class="af"><span>Lumen commission on each theatre’s ticket sales</span><span class="af-in"><input type="number" name="commission" min="0" max="20" step="0.1" value="${f.commissionPct ?? 0.5}"><small>%</small></span></label>
       <label class="af"><span>How long seats are held during payment</span><span class="af-in"><input type="number" name="hold" min="2" max="15" value="${f.holdMinutes}"><small>minutes</small></span></label>
       <label class="af chk"><input type="checkbox" name="demoCrowd" ${f.demoCrowd ? 'checked' : ''}> Show demo crowd (simulated sales from the theatre counter and other apps)</label>
       <p class="muted">Customers will pay ${inr(Math.round(f.conv * (1 + f.gst)))} per ticket in fees (fee + GST), shown up front on every showtime.</p>
@@ -298,21 +370,23 @@ function fees(host, ctx) {
         <label class="af"><span>Yearly price before discount</span><span class="af-in"><small>₹</small><input type="number" name="yearlyList" min="0" max="1000000" value="${pb.yearlyList}"></span></label></div>
       <div class="af-grid"><label class="af"><span>Yearly discount</span><span class="af-in"><input type="number" name="yearlyOffPct" min="0" max="90" value="${pb.yearlyOffPct}"><small>%</small></span></label>
         <label class="af"><span>Days before an unpaid theatre is hidden</span><span class="af-in"><input type="number" name="graceDays" min="0" max="60" value="${pb.graceDays}"><small>days</small></span></label></div>
+      <div class="af-grid"><label class="af"><span>Free trial for new theatres</span><span class="af-in"><input type="number" name="trialDays" min="0" max="90" value="${pb.trialDays}"><small>days</small></span></label>
+        <label class="af"><span>GST added on plan price (0 until Lumen has a GSTIN)</span><span class="af-in"><input type="number" name="gstPct" min="0" max="28" value="${pb.gstPct}"><small>%</small></span></label></div>
       <p class="muted" id="planSum"></p><p class="err" id="pErr"></p><button type="submit" class="btn primary">${icon('check')}Save plan prices</button></form></section>`;
-  const planSum = () => { const x = Object.fromEntries(new FormData($('#planForm')).entries()); const y = Math.round(+x.yearlyList * (1 - +x.yearlyOffPct / 100)); $('#planSum').textContent = `Partners pay ${rupees(+x.monthly)} a month, or ${rupees(y)} a year (save ${rupees(+x.yearlyList - y)}).`; };
+  const planSum = () => { const x = Object.fromEntries(new FormData($('#planForm')).entries()); const y = Math.round(+x.yearlyList * (1 - +x.yearlyOffPct / 100)); const g = (v) => Math.round(v * (100 + +x.gstPct)) / 100; $('#planSum').textContent = `New theatres get ${+x.trialDays} days free, then pay ${rupees(g(+x.monthly))} a month, or ${rupees(g(y))} a year (save ${rupees(+x.yearlyList - y)})${+x.gstPct ? `, including ${x.gstPct}% GST` : ''}.`; };
   planSum(); $('#planForm').addEventListener('input', planSum);
   $('#planForm').addEventListener('submit', async (e) => {
     e.preventDefault(); const x = Object.fromEntries(new FormData(e.target).entries());
-    const v = { monthly: Math.round(+x.monthly), yearlyList: Math.round(+x.yearlyList), yearlyOffPct: +x.yearlyOffPct, graceDays: Math.round(+x.graceDays) };
-    if (!(v.monthly >= 0 && v.yearlyList >= 0 && v.yearlyOffPct >= 0 && v.yearlyOffPct <= 90 && v.graceDays >= 0 && v.graceDays <= 60)) { $('#pErr').textContent = 'Check the numbers: discount 0–90%, grace 0–60 days.'; return; }
+    const v = { monthly: Math.round(+x.monthly), yearlyList: Math.round(+x.yearlyList), yearlyOffPct: +x.yearlyOffPct, graceDays: Math.round(+x.graceDays), trialDays: Math.round(+x.trialDays), gstPct: +x.gstPct };
+    if (!(v.monthly >= 0 && v.yearlyList >= 0 && v.yearlyOffPct >= 0 && v.yearlyOffPct <= 90 && v.graceDays >= 0 && v.graceDays <= 60 && v.trialDays >= 0 && v.trialDays <= 90 && v.gstPct >= 0 && v.gstPct <= 28)) { $('#pErr').textContent = 'Check the numbers: discount 0–90%, grace 0–60 days, trial 0–90 days, GST 0–28%.'; return; }
     await save(ctx, 'billing', v, 'Plan prices saved. New payments use them.');
   });
   $('#feeForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const x = Object.fromEntries(new FormData(e.target).entries());
-    const conv = +x.conv, gst = +x.gst, hold = +x.hold;
-    if (!(conv >= 0 && conv <= 200) || !(gst >= 0 && gst <= 28) || !(hold >= 2 && hold <= 15)) { $('#fErr').textContent = 'Fee ₹0–200, GST 0–28%, hold 2–15 minutes.'; return; }
-    await save(ctx, 'fees', { conv, gst: gst / 100, holdMinutes: hold, demoCrowd: !!x.demoCrowd }, 'Fees saved. New bookings use them right away.');
+    const conv = +x.conv, gst = +x.gst, hold = +x.hold, com = +x.commission;
+    if (!(conv >= 0 && conv <= 200) || !(gst >= 0 && gst <= 28) || !(hold >= 2 && hold <= 15) || !(com >= 0 && com <= 20)) { $('#fErr').textContent = 'Fee ₹0–200, GST 0–28%, commission 0–20%, hold 2–15 minutes.'; return; }
+    await save(ctx, 'fees', { conv, gst: gst / 100, holdMinutes: hold, demoCrowd: !!x.demoCrowd, commissionPct: com }, 'Fees saved. New bookings use them right away.');
   });
 }
 

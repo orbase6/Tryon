@@ -2,7 +2,7 @@
 // receipts. Used by registration, sign-in (unpaid accounts) and the partner panel.
 import { icon, esc, toast } from './ui.js';
 
-const rupees = (n) => '₹' + Math.round(n).toLocaleString('en-IN');
+const rupees = (n) => '₹' + (Number.isInteger(+n) ? (+n).toLocaleString('en-IN') : (+n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 export const fmtDay = (t) => new Date(t).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 
 export function planCards(p, chosen = 'yearly') {
@@ -16,6 +16,7 @@ export function planCards(p, chosen = 'yearly') {
       <span class="plan-n">Yearly</span><span class="plan-p">${p.yearly.save ? `<s>${rupees(p.yearly.list)}</s>` : ''}<b>${rupees(p.yearly.amount)}</b><small>/ year</small></span>
       <span class="plan-s">About ${rupees(per)} a month.</span></button>
   </div>
+  ${p.gstPct ? `<p class="muted small">Prices include ${p.gstPct}% GST.</p>` : ''}
   <ul class="plan-inc">${['Sell tickets for all your screens', 'Your real seat layout with 3D seat views', 'Shows, prices, photos and banners', 'Weekly payouts to your bank'].map((x) => `<li>${icon('check')}${x}</li>`).join('')}</ul>
   ${p.gateway === 'demo' ? `<p class="notice demo-pay">${icon('bell')}<span><b>Demo payment.</b> No money is taken. Real UPI / card payments switch on when Lumen adds its Razorpay keys.</span></p>` : ''}`;
 }
@@ -57,7 +58,7 @@ export function receiptsTable(payments) {
   if (!payments.length) return '<p class="empty">No payments yet.</p>';
   return `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Date</th><th>Receipt</th><th>Plan</th><th>Period</th><th>Amount</th><th>Status</th></tr></thead><tbody>
     ${payments.map((x) => `<tr><td>${fmtDay(x.paidAt || x.createdAt)}</td><td class="mono-s">${esc(x.id)}</td><td>${x.plan === 'yearly' ? 'Yearly' : 'Monthly'}</td>
-      <td>${x.periodFrom ? `${fmtDay(x.periodFrom)} – ${fmtDay(x.periodTo)}` : '—'}</td><td><b>${rupees(x.amount)}</b>${x.gateway === 'demo' ? '<small>demo, no money taken</small>' : ''}</td>
+      <td>${x.periodFrom ? `${fmtDay(x.periodFrom)} – ${fmtDay(x.periodTo)}` : '—'}</td><td><b>${rupees(x.amount)}</b>${x.gst ? `<small>incl. GST ${rupees(x.gst)}</small>` : ''}${x.gateway === 'demo' ? '<small>demo, no money taken</small>' : ''}</td>
       <td><span class="st st-${x.status === 'paid' ? 'ok' : x.status === 'failed' ? 'bad' : 'warn'}">${x.status === 'paid' ? 'Paid' : x.status === 'failed' ? 'Failed' : 'Not finished'}</span></td></tr>`).join('')}
   </tbody></table></div>`;
 }

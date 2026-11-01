@@ -6,7 +6,8 @@ import { gate, openAccount } from './auth.js';
 import { planCards, bindPlanCards, payPlan, receiptsTable, rupees, fmtDay } from './billing.js';
 import { uploadBox, bindUpload, moviePicker, bindMoviePicker, bannerPreview, bannerState, STATUS } from './media.js';
 
-const TABS = [['overview', 'Overview'], ['shows', 'Shows'], ['prices', 'Prices'], ['layouts', 'Seat layouts'], ['media', 'Photos & banners'], ['kyc', 'Bank & KYC'], ['sales', 'Sales & payouts'], ['billing', 'Plan & billing']];
+const TABS = [['overview', 'Overview'], ['shows', 'Shows'], ['prices', 'Prices'], ['layouts', 'Seat layouts'], ['media', 'Photos & banners'], ['kyc', 'Bank & KYC'], ['sales', 'Sales & payouts'], ['billing', 'Plan & billing'], ['team', 'Team']];
+const OWNER_ONLY = ['kyc', 'billing', 'team'];
 const KYC_LABEL = { not_submitted: ['Not submitted', 'warn'], pending: ['Under review', 'warn'], verified: ['Verified', 'ok'], rejected: ['Rejected', 'bad'] };
 const money = (v) => '₹' + (Math.round(v * 100) / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 });
 const chip = ([label, tone]) => `<span class="st st-${tone}">${esc(label)}</span>`;
@@ -26,7 +27,8 @@ export async function partnerView(view, theatreId, tab, ctx) {
     $('#acct').addEventListener('click', () => openAccount(ctx)); return;
   }
   const th = mine.find((t) => t.id === theatreId) || mine[0];
-  if (!TABS.some(([k]) => k === tab)) tab = 'overview';
+  const staff = !!u.ownerId, tabs = TABS.filter(([k]) => !(staff && OWNER_ONLY.includes(k)) && !(u.role === 'admin' && k === 'team'));
+  if (!tabs.some(([k]) => k === tab)) tab = 'overview';
   const info = ctx.db.state.theatres[th.id] || {};
   const kyc = KYC_LABEL[info.kycStatus || 'not_submitted'];
   const groups = CITIES.map((c) => [c, mine.filter((t) => t.cityId === c.id)]).filter(([, l]) => l.length);
@@ -38,18 +40,20 @@ export async function partnerView(view, theatreId, tab, ctx) {
     <div class="pt-head"><h1>${esc(th.name)}</h1><span class="muted">${esc(th.area)}, ${esc(cityOf(th).en)}</span>
       ${chip(th.status === 'suspended' ? ['Suspended by Lumen', 'bad'] : ['Live on Lumen', 'ok'])} ${chip(['KYC: ' + kyc[0], kyc[1]])}</div>
     ${planNotice(u, th, tab)}
-    <nav class="tabs" aria-label="Partner sections">${TABS.map(([k, l]) => `<a href="#partner-${th.id}-${k}" ${k === tab ? 'aria-current="page"' : ''}>${l}</a>`).join('')}</nav>
+    ${staff ? `<div class="notice">${icon('user')}<span>You are signed in as <b>${u.staffRole === 'viewer' ? 'a viewer' : 'a manager'}</b>${u.staffRole === 'viewer' ? ': you can look but not change anything.' : '. Bank details, plan and team are managed by the owner.'}</span></div>` : ''}
+    <nav class="tabs" aria-label="Partner sections">${tabs.map(([k, l]) => `<a href="#partner-${th.id}-${k}" ${k === tab ? 'aria-current="page"' : ''}>${l}</a>`).join('')}</nav>
     <div id="pt"></div>`;
   $('#ptTheatre')?.addEventListener('change', (e) => { location.hash = `partner-${e.target.value}-${tab}`; });
   $('#acct').addEventListener('click', () => openAccount(ctx));
   const host = $('#pt');
-  ({ overview, shows, prices, layouts, media: mediaTab, kyc: kycTab, sales, billing })[tab](host, th, ctx);
+  ({ overview, shows, prices, layouts, media: mediaTab, kyc: kycTab, sales, billing, team })[tab](host, th, ctx);
 }
 
 /* ---------- plan & billing ---------- */
 const daysLeft = (sub) => Math.ceil((sub.until - Date.now()) / 864e5);
 function planNotice(u, th, tab) {
   if (u.role !== 'partner' || tab === 'billing') return '';
+  if (u.sub && u.sub.plan === 'trial' && daysLeft(u.sub) >= 0) return `<div class="notice">${icon('clock')}<span><b>Free trial: ${daysLeft(u.sub)} day${daysLeft(u.sub) === 1 ? '' : 's'} left</b> (until ${fmtDay(u.sub.until)}). ${u.ownerId ? 'Ask the owner to choose a plan.' : 'Choose a plan to keep selling after the trial.'}</span>${u.ownerId ? '' : `<a class="btn primary sm" href="#partner-${th.id}-billing">See plans</a>`}</div>`;
   const link = `<a class="btn primary sm" href="#partner-${th.id}-billing">Renew plan</a>`;
   if (!u.sub) return `<div class="notice">${icon('bell')}<span><b>Choose a plan</b> to keep selling tickets on Lumen.</span><a class="btn primary sm" href="#partner-${th.id}-billing">See plans</a></div>`;
   const d = daysLeft(u.sub);
@@ -66,7 +70,7 @@ async function billing(host, th, ctx) {
   const d = sub ? daysLeft(sub) : null;
   host.innerHTML = `<div class="pt-cols">
     <section class="panel"><h2>Your plan</h2>
-      ${u.role === 'admin' ? '<p class="muted">Admins do not need a plan. This is what partners see.</p>' : sub ? `<div class="tiles"><div class="tile"><small>Plan</small><b>${sub.plan === 'yearly' ? 'Yearly' : sub.plan === 'monthly' ? 'Monthly' : 'Free (from Lumen)'}</b><span>${sub.amount ? rupees(sub.amount) : '—'}</span></div>
+      ${u.role === 'admin' ? '<p class="muted">Admins do not need a plan. This is what partners see.</p>' : sub ? `<div class="tiles"><div class="tile"><small>Plan</small><b>${sub.plan === 'yearly' ? 'Yearly' : sub.plan === 'monthly' ? 'Monthly' : sub.plan === 'trial' ? 'Free trial' : 'Free (from Lumen)'}</b><span>${sub.amount ? rupees(sub.amount) : '—'}</span></div>
         <div class="tile"><small>${d >= 0 ? 'Valid until' : 'Ended on'}</small><b>${fmtDay(sub.until)}</b><span>${d >= 0 ? `${d} day${d === 1 ? '' : 's'} left` : 'Renew to keep selling'}</span></div></div>`
         : '<p class="muted">You do not have a plan yet.</p>'}
       <p class="hint">Renewing adds time after your current end date, so you never lose days. If a plan runs out, customers stop seeing your theatre ${plans.graceDays} days later.</p>
@@ -82,6 +86,29 @@ async function billing(host, th, ctx) {
     try { const r = await payPlan(ctx.db, chosen); await ctx.db.refresh(); toast(`Paid. Your plan now runs until ${fmtDay(r.sub.until)}.`); ctx.route(); }
     catch (err) { $('#bErr').textContent = err.message; b.disabled = false; }
   });
+}
+
+/* ---------- team (owner adds staff) ---------- */
+async function team(host, th, ctx) {
+  host.innerHTML = '<div class="spin"></div>';
+  let staff; try { staff = await ctx.db.team(); } catch (e) { host.innerHTML = `<p class="err">${esc(e.message)}</p>`; return; }
+  if (!ctx.isCurrent()) return;
+  host.innerHTML = `<div class="pt-cols"><section class="panel"><h2>Your team</h2>
+    ${staff.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Name</th><th>Role</th><th></th></tr></thead><tbody>${staff.map((x) => `<tr><td><b>${esc(x.name)}</b><small>${esc(x.email)}</small></td>
+      <td><span class="dd"><select data-role="${x.id}" aria-label="Role"><option value="manager" ${x.staffRole === 'manager' ? 'selected' : ''}>Manager</option><option value="viewer" ${x.staffRole === 'viewer' ? 'selected' : ''}>Viewer</option></select></span></td>
+      <td><button type="button" class="btn ghost sm danger" data-rm="${x.id}">${icon('trash')}Remove</button></td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">No staff yet.</p>'}
+    <ul class="plan-inc"><li>${icon('check')}<b>Manager</b>: shows, prices, seat layouts, photos & banners, sales.</li><li>${icon('eye')}<b>Viewer</b>: can see everything but change nothing.</li><li>${icon('lock')}Only you can change bank details, the plan and the team.</li></ul></section>
+    <section class="panel"><h2>Add a staff member</h2><form id="tmF" class="pt-form" novalidate>
+      <label class="af"><span>Name</span><input class="input" name="name" autocomplete="off"></label><label class="af"><span>Email</span><input class="input" name="email" type="email" autocomplete="off"></label>
+      <label class="af"><span>Role</span><span class="dd"><select name="role"><option value="manager">Manager</option><option value="viewer">Viewer</option></select></span></label>
+      <p class="err" id="tmErr"></p><button type="submit" class="btn primary">${icon('plus')}Add</button>
+      <p class="hint">We email them. They set their own password with “Forgot password” on the sign-in page.</p></form></section></div>`;
+  $('#tmF').addEventListener('submit', async (e) => {
+    e.preventDefault(); const f = Object.fromEntries(new FormData(e.target).entries());
+    try { await ctx.db.teamAdd(f); toast(`${f.name} added. We emailed them how to sign in.`); team(host, th, ctx); } catch (err) { $('#tmErr').textContent = err.message; }
+  });
+  host.querySelectorAll('[data-rm]').forEach((b) => b.addEventListener('click', async () => { if (!confirm('Remove this person? They are signed out right away.')) return; try { await ctx.db.teamAction(b.dataset.rm, 'remove'); team(host, th, ctx); } catch (e) { toast(e.message); } }));
+  host.querySelectorAll('[data-role]').forEach((s) => s.addEventListener('change', async () => { try { await ctx.db.teamAction(s.dataset.role, 'role', s.value); toast('Role changed.'); } catch (e) { toast(e.message); } }));
 }
 
 /* ---------- photos & banners ---------- */
@@ -352,8 +379,13 @@ function sales(host, th, ctx) {
       <div class="tile"><small>Ticket sales</small><b>${money(sum('ticket'))}</b><span>${bs.length} bookings</span></div>
       <div class="tile"><small>Food & drinks</small><b>${money(bs.filter((b) => !b.cancelled).reduce((a, b) => a + bookingMoney(b).food, 0))}</b><span>Pre-ordered</span></div>
       <div class="tile"><small>Refunds</small><b>${money(sum('refund'))}</b><span>${bs.filter((b) => b.cancelled).length} cancelled</span></div>
-      <div class="tile"><small>Your share</small><b>${money(sum('theatre'))}</b><span>Lumen’s booking fee is not part of this</span></div>
+      <div class="tile"><small>Lumen commission</small><b>${money(sum('commission'))}</b><span>${ctx.db.state.fees?.commissionPct ?? 0.5}% of ticket sales</span></div>
+      <div class="tile"><small>Your share</small><b>${money(sum('theatre'))}</b><span>After refunds and commission</span></div>
     </div>
+    <h2 class="sec">Day by day</h2>
+    ${(() => { const days = new Map(); for (const b of bs) { const k = new Date(b.at).toDateString(); const d = days.get(k) || { at: b.at, n: 0, ticket: 0, refund: 0, commission: 0, theatre: 0 }; const mm = bookingMoney(b); d.n++; d.ticket += mm.ticket; d.refund += mm.refund; d.commission += mm.commission; d.theatre += mm.theatre; days.set(k, d); }
+      const list = [...days.values()].sort((a, b) => b.at - a.at);
+      return list.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Day</th><th>Bookings</th><th>Ticket sales</th><th>Refunds</th><th>Commission</th><th>Your share</th></tr></thead><tbody>${list.map((d) => `<tr><td>${fmtDate(new Date(d.at))}</td><td>${d.n}</td><td>${money(d.ticket)}</td><td>${money(d.refund)}</td><td>${money(d.commission)}</td><td><b>${money(d.theatre)}</b></td></tr>`).join('')}</tbody></table></div>` : '<p class="empty">No sales yet.</p>'; })()}
     <h2 class="sec">Payouts</h2>
     ${pays.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Week</th><th>Bookings</th><th>Amount</th><th>Status</th></tr></thead><tbody>${pays.map((p) => `<tr><td>${fmtDate(p.week)} – ${fmtDate(p.end)}</td><td>${p.count}</td><td><b>${money(p.amount)}</b></td><td>${chip([p.note, p.state === 'paid' ? 'ok' : p.state === 'due' ? 'warn' : 'bad'])}</td></tr>`).join('')}</tbody></table></div>` : '<p class="empty">No bookings yet. Payouts appear here once tickets are sold.</p>'}
     <h2 class="sec">Bookings</h2>

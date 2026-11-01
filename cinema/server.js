@@ -41,9 +41,9 @@ const DAY = 864e5;
 
 /* ---------------- storage ---------------- */
 let db = { movies: [], hiddenMovies: [], schedule: {}, theatres: {}, offers: null, fees: null, layouts: {}, prices: {}, bookings: [],
-  users: [], sessions: {}, newTheatres: [], media: { movies: {}, theatres: {} }, banners: [], payments: [], billing: null };
+  users: [], sessions: {}, newTheatres: [], media: { movies: {}, theatres: {} }, banners: [], payments: [], billing: null, settings: {}, messages: [], cities: [] };
 try { db = { ...db, ...JSON.parse(fs.readFileSync(DB_FILE, 'utf8')) }; } catch (e) { /* first run */ }
-db.payments ||= [];
+db.payments ||= []; db.settings ||= {}; db.messages ||= []; db.cities ||= [];
 db.media ||= { movies: {}, theatres: {} }; db.media.movies ||= {}; db.media.theatres ||= {};
 let saveTimer = null;
 function save() {
@@ -66,17 +66,74 @@ function checkPw(user, pw) {
 const pwProblem = (pw) => (typeof pw !== 'string' || pw.length < 8 ? 'Use at least 8 characters.' : !/[A-Za-z]/.test(pw) || !/\d/.test(pw) ? 'Use both letters and numbers.' : null);
 const normEmail = (e) => String(e || '').trim().toLowerCase();
 const emailOk = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e);
-const publicUser = (u) => u && ({ id: u.id, email: u.email, name: u.name, phone: u.phone, role: u.role, status: u.status, theatreIds: u.theatreIds || [], request: u.request || null, note: u.note || '', createdAt: u.createdAt, sub: u.sub || null });
+const ownerOf = (u) => (u && u.ownerId ? db.users.find((x) => x.id === u.ownerId) : u);
+const publicUser = (u) => u && ({ id: u.id, email: u.email, name: u.name, phone: u.phone, role: u.role, status: u.status, theatreIds: u.theatreIds || [], request: u.request || null, note: u.note || '', createdAt: u.createdAt,
+  sub: ownerOf(u)?.sub || null, staffRole: u.staffRole || null, ownerId: u.ownerId || null, trialUsed: !!u.trialUsed, trialRequested: !!u.trialRequested });
 
 /* ---------------- partner plans (subscription) ---------------- */
 // Prices are set by the admin (Console → Fees). Yearly = list price minus the yearly discount.
 const plans = () => {
-  const b = { monthly: 399, yearlyList: 5000, yearlyOffPct: 20, graceDays: 7, ...(db.billing || {}) };
+  const b = { monthly: 399, yearlyList: 5000, yearlyOffPct: 20, graceDays: 7, trialDays: 14, gstPct: 0, ...(db.billing || {}) };
   const yearly = Math.round(b.yearlyList * (1 - b.yearlyOffPct / 100));
-  return { monthly: { id: 'monthly', amount: b.monthly, days: 30, label: 'Monthly' },
-    yearly: { id: 'yearly', amount: yearly, list: b.yearlyList, offPct: b.yearlyOffPct, save: b.yearlyList - yearly, days: 365, label: 'Yearly' }, graceDays: b.graceDays };
+  // GST is added on top only when Lumen turns it on (after GST registration)
+  const withGst = (base) => ({ base, gst: Math.round(base * b.gstPct) / 100, amount: Math.round(base * (100 + b.gstPct)) / 100 });
+  return { monthly: { id: 'monthly', ...withGst(b.monthly), days: 30, label: 'Monthly' },
+    yearly: { id: 'yearly', ...withGst(yearly), list: b.yearlyList, offPct: b.yearlyOffPct, save: b.yearlyList - yearly, days: 365, label: 'Yearly' },
+    graceDays: b.graceDays, trialDays: b.trialDays, gstPct: b.gstPct };
 };
-const RZP = () => (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET ? { id: process.env.RAZORPAY_KEY_ID, secret: process.env.RAZORPAY_KEY_SECRET } : null);
+// Keys and passwords entered in Admin → Settings win over settings.env / environment variables
+const cfg = (group, key, env) => (db.settings[group] && db.settings[group][key]) || (env ? process.env[env] : '') || '';
+const RZP = () => { const id = cfg('razorpay', 'keyId', 'RAZORPAY_KEY_ID'), secret = cfg('razorpay', 'keySecret', 'RAZORPAY_KEY_SECRET'); return id && secret ? { id, secret } : null; };
+const BASE_CITIES = ['chennai', 'coimbatore', 'madurai', 'bengaluru', 'kochi'];
+const cityIndex = (id) => { const i = BASE_CITIES.indexOf(id); if (i >= 0) return i; const j = db.cities.findIndex((c) => c.id === id); return j >= 0 ? BASE_CITIES.length + j : -1; };
+// Show start time from a show id (…d20261102h1845), in India time
+function showStartMs(showId) {
+  const m = /d(\d{4})(\d{2})(\d{2})h(\d{2})(\d{2})$/.exec(showId || ''); if (!m) return null;
+  return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) - 5.5 * 3600000;
+}
+// Small HTTPS JSON client for WhatsApp / SMS providers
+function httpsJson(url, { method = 'POST', headers = {}, body } = {}) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url); const data = body ? JSON.stringify(body) : '';
+    const r = require('https').request({ host: u.host, path: u.pathname + u.search, method, headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(data), ...headers }, timeout: 15000 }, (res) => {
+      let b = ''; res.on('data', (c) => { b += c; }); res.on('end', () => { let j = {}; try { j = JSON.parse(b); } catch (e) {} res.statusCode < 300 ? resolve(j) : reject(new Error(j.error?.message || j.message || `HTTP ${res.statusCode}`)); });
+    });
+    r.on('timeout', () => r.destroy(new Error('Timed out'))); r.on('error', reject); r.end(data);
+  });
+}
+// WhatsApp Cloud API (Meta). Business-started messages must use a template approved in WhatsApp Manager.
+async function sendWhatsApp(phone10, template, params) {
+  const token = cfg('whatsapp', 'token'), phoneId = cfg('whatsapp', 'phoneId'), lang = cfg('whatsapp', 'lang') || 'en';
+  if (!token || !phoneId || !template) { console.log(`\n  [WhatsApp not set up] To: +91${phone10} · ${template || 'no template'} · ${params.join(' | ')}\n`); return { sent: false }; }
+  await httpsJson(`https://graph.facebook.com/v20.0/${encodeURIComponent(phoneId)}/messages`, { headers: { authorization: 'Bearer ' + token },
+    body: { messaging_product: 'whatsapp', to: '91' + phone10, type: 'template', template: { name: template, language: { code: lang }, components: [{ type: 'body', parameters: params.map((t) => ({ type: 'text', text: String(t).slice(0, 200) })) }] } } });
+  return { sent: true };
+}
+// OTP by SMS (MSG91), else by WhatsApp (authentication template), else printed in this window
+async function sendPhoneOtp(phone10, code) {
+  const key = cfg('sms', 'authKey'), tpl = cfg('sms', 'templateId');
+  if (key && tpl) { await httpsJson(`https://control.msg91.com/api/v5/otp?template_id=${encodeURIComponent(tpl)}&mobile=91${phone10}&otp=${code}`, { headers: { authkey: key }, body: {} }); return { sent: true, via: 'sms' }; }
+  const wt = cfg('whatsapp', 'otpTemplate');
+  if (wt && cfg('whatsapp', 'token')) {
+    const token = cfg('whatsapp', 'token'), phoneId = cfg('whatsapp', 'phoneId'), lang = cfg('whatsapp', 'lang') || 'en';
+    await httpsJson(`https://graph.facebook.com/v20.0/${encodeURIComponent(phoneId)}/messages`, { headers: { authorization: 'Bearer ' + token },
+      body: { messaging_product: 'whatsapp', to: '91' + phone10, type: 'template', template: { name: wt, language: { code: lang }, components: [{ type: 'body', parameters: [{ type: 'text', text: code }] }, { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: code }] }] } } });
+    return { sent: true, via: 'whatsapp' };
+  }
+  console.log(`\n  [SMS not set up] Login code for +91${phone10}: ${code}\n`);
+  return { sent: false, via: 'console' };
+}
+const SECRET_KEYS = { razorpay: ['keySecret'], smtp: ['pass'], whatsapp: ['token'], sms: ['authKey'] };
+const SETTING_FIELDS = { razorpay: ['keyId', 'keySecret'], smtp: ['host', 'port', 'user', 'pass', 'from'], whatsapp: ['token', 'phoneId', 'lang', 'ticketTemplate', 'otpTemplate'], sms: ['authKey', 'templateId'], contact: ['email', 'phone', 'address', 'company'] };
+function maskedSettings() {
+  const out = {};
+  for (const [g, keys] of Object.entries(SETTING_FIELDS)) {
+    out[g] = {};
+    for (const k of keys) { const v = (db.settings[g] || {})[k] || ''; out[g][k] = SECRET_KEYS[g]?.includes(k) ? (v ? '••••' + String(v).slice(-4) : '') : v; }
+  }
+  out.env = { razorpay: !!(process.env.RAZORPAY_KEY_ID), smtp: !!process.env.SMTP_HOST };
+  return out;
+}
 function rzpOrder(amountPaise, receipt, notes) {
   const k = RZP();
   return new Promise((resolve, reject) => {
@@ -90,7 +147,7 @@ function rzpOrder(amountPaise, receipt, notes) {
 // Theatres whose owner's plan ran out more than graceDays ago are hidden from customers
 function lapsedTheatres() {
   const g = plans().graceDays * DAY, now = Date.now(), out = new Set(), ok = new Set();
-  for (const u of db.users) if (u.role === 'partner' && u.status === 'active') for (const t of u.theatreIds || []) {
+  for (const u of db.users) if (u.role === 'partner' && u.status === 'active' && !u.ownerId) for (const t of u.theatreIds || []) {
     if (u.sub && u.sub.until + g < now) out.add(t); else ok.add(t);
   }
   return [...out].filter((t) => !ok.has(t));
@@ -115,6 +172,7 @@ function currentUser(req) {
   const t = cookies(req).lumen_sid; if (!t) return null;
   const s = db.sessions[t]; if (!s || s.exp < Date.now()) { if (s) { delete db.sessions[t]; save(); } return null; }
   const u = db.users.find((x) => x.id === s.userId);
+  if (u && u.ownerId) { const o = db.users.find((x) => x.id === u.ownerId); if (!o || o.status !== 'active') return null; u.theatreIds = o.theatreIds || []; }
   return u && u.status === 'active' ? u : null;
 }
 function startSession(req, res, u) {
@@ -150,12 +208,12 @@ function useOtp(email, purpose, code) {
 
 /* ---------------- email (SMTP over TLS, no packages) ---------------- */
 function sendMail(to, subject, text) {
-  const { SMTP_HOST, SMTP_USER, SMTP_PASS } = process.env;
+  const SMTP_HOST = cfg('smtp', 'host', 'SMTP_HOST'), SMTP_USER = cfg('smtp', 'user', 'SMTP_USER'), SMTP_PASS = cfg('smtp', 'pass', 'SMTP_PASS');
   if (!SMTP_HOST) {
     console.log(`\n  [email not set up] To: ${to}\n  ${subject}\n  ${text.replace(/\r\n/g, '\n  ')}\n`);
     return Promise.resolve({ sent: false });
   }
-  const port = +process.env.SMTP_PORT || 465, from = process.env.MAIL_FROM || SMTP_USER;
+  const port = +cfg('smtp', 'port', 'SMTP_PORT') || 465, from = cfg('smtp', 'from', 'MAIL_FROM') || SMTP_USER;
   const secure = port === 465 || process.env.SMTP_SECURE === '1'; // implicit TLS; otherwise STARTTLS
   const tlsOpt = { servername: SMTP_HOST, rejectUnauthorized: process.env.SMTP_INSECURE !== '1' };
   return new Promise((resolve, reject) => {
@@ -228,7 +286,7 @@ function body(req) {
     req.on('end', () => { try { resolve(s ? JSON.parse(s) : {}); } catch (e) { reject(Object.assign(new Error('Bad JSON'), { status: 400 })); } });
   });
 }
-const ownsTheatre = (u, tid) => u && (u.role === 'admin' || (u.theatreIds || []).includes(tid));
+const ownsTheatre = (u, tid) => u && (u.role === 'admin' || (u.role === 'partner' && (u.theatreIds || []).includes(tid)));
 const theatreOfScreen = (sid) => String(sid).replace(/s\d+$/, '');
 const ip = (req) => req.headers['cf-connecting-ip'] || req.socket.remoteAddress || '';
 
@@ -239,12 +297,27 @@ function stateFor(u, client) {
   const now = Date.now();
   const banners = db.banners.filter((b) => (u && u.role === 'admin') || (u && b.theatreId && ownsTheatre(u, b.theatreId)) || (b.status === 'live' && (!b.from || Date.parse(b.from) <= now + DAY) && (!b.to || Date.parse(b.to) + DAY >= now)));
   let bookings;
+  const mine = (b) => b.client === client || (u && b.userId === u.id);
   if (u && u.role === 'admin') bookings = db.bookings;
-  else bookings = db.bookings.filter((b) => b.client === client || (u && b.theatreId && ownsTheatre(u, b.theatreId)))
-    .map((b) => (b.client === client ? b : { ...b, contact: b.contact ? { email: b.contact.email.replace(/^(.).*(@.*)$/, '$1•••$2'), phone: b.contact.phone ? '•••••' + b.contact.phone.slice(-4) : '' } : null }));
+  else bookings = db.bookings.filter((b) => mine(b) || (u && u.role === 'partner' && b.theatreId && ownsTheatre(u, b.theatreId)))
+    .map((b) => (mine(b) ? b : { ...b, contact: b.contact ? { email: b.contact.email.replace(/^(.).*(@.*)$/, '$1•••$2'), phone: b.contact.phone ? '•••••' + b.contact.phone.slice(-4) : '' } : null }));
   return { movies: db.movies, hiddenMovies: db.hiddenMovies, schedule: db.schedule, theatres, offers: db.offers, fees: db.fees, layouts: db.layouts, prices: db.prices,
     newTheatres: db.newTheatres, media: db.media, banners, bookings, me: publicUser(u), billing: db.billing, lapsed: lapsedTheatres(),
-    payments: u ? db.payments.filter((x) => u.role === 'admin' || x.userId === u.id) : [] };
+    payments: u && u.role !== 'customer' ? db.payments.filter((x) => u.role === 'admin' || x.userId === ownerOf(u).id) : [], cities: db.cities,
+    contact: { email: cfg('contact', 'email'), phone: cfg('contact', 'phone'), company: cfg('contact', 'company'), address: cfg('contact', 'address') },
+    kycPublic: Object.fromEntries(Object.entries(db.theatres).filter(([, t]) => t.kycStatus === 'verified' && t.kyc).map(([id, t]) => [id, { legal: t.kyc.legal, gstin: t.kyc.gstin }])) };
+}
+
+/* ---------------- ticket messages (email + WhatsApp) ---------------- */
+async function notifyTicket(b) {
+  const sm = b.summary || {}, c = b.contact || {};
+  const clean = (x, n = 120) => String(x || '').replace(/[\r\n]+/g, ' ').slice(0, n);
+  const title = clean(sm.title), when = clean(sm.when), place = clean(sm.place), seats = clean(sm.seats || (b.seats || []).join(', '));
+  const lines = [`Booking ID: ${b.id}`, title && `What: ${title}`, when && `When: ${when}`, place && `Where: ${place}`, seats && `Seats: ${seats}`, `Paid: Rs ${Math.round(+b.total || 0)}`].filter(Boolean);
+  const jobs = [];
+  if (emailOk(normEmail(c.email))) jobs.push(sendMail(normEmail(c.email), `Your Lumen ticket ${b.id}${title ? ': ' + title : ''}`, `Hi,\r\n\r\nYour booking is confirmed.\r\n\r\n${lines.join('\r\n')}\r\n\r\nShow this booking ID or the QR code in the Lumen app at the entrance.\r\nCancel online up to 1 hour before the show for a 75% refund of the ticket price.\r\n\r\nLumen Cinemas`));
+  if (/^[6-9]\d{9}$/.test(c.phone || '')) jobs.push(sendWhatsApp(c.phone, cfg('whatsapp', 'ticketTemplate'), [b.id, title || 'Your booking', when || '-', place || '-', seats || '-']));
+  await Promise.allSettled(jobs);
 }
 
 /* ---------------- API ---------------- */
@@ -252,11 +325,14 @@ async function apiRoute(req, res, url) {
   const p = url.pathname.replace(/^\/api\//, '');
   const u = currentUser(req);
   const m = req.method;
+  let mm;
   // State-changing JSON requests must be JSON (blocks cross-site form posts)
   if (['POST', 'PUT', 'DELETE'].includes(m) && p !== 'upload' && !(req.headers['content-type'] || '').includes('application/json')) return send(res, 415, { error: 'Send JSON' });
   const need = (role) => {
     if (!u) { send(res, 401, { error: 'Please sign in.' }); return false; }
     if (role && u.role !== role && !(role === 'staff' && ['admin', 'partner'].includes(u.role))) { send(res, 403, { error: 'You do not have access to this.' }); return false; }
+    // Theatre staff: viewers only look; managers cannot touch bank details, billing or the team
+    if (u.ownerId && !p.startsWith('auth/') && ((u.staffRole === 'viewer' && m !== 'GET') || (u.staffRole !== 'owner' && (/^(billing\/(order|verify|trial)|team)/.test(p) || (p === 'theatres' && m === 'PUT'))))) { send(res, 403, { error: 'Only the theatre owner can do this.' }); return false; }
     return true;
   };
 
@@ -267,10 +343,10 @@ async function apiRoute(req, res, url) {
   if (p === 'auth/login' && m === 'POST') {
     const { email: e, password } = await body(req); const email = normEmail(e);
     if (limited('login|' + ip(req) + '|' + email, 8, 15 * 60000)) return send(res, 429, { error: 'Too many tries. Wait 15 minutes and try again.' });
-    const user = db.users.find((x) => x.email === email);
+    const user = db.users.find((x) => x.email === email && x.role !== 'customer');
     if (!user || !checkPw(user, password || '')) return send(res, 401, { error: 'Email or password is wrong.' });
     if (user.status === 'unverified') return send(res, 403, { error: 'Verify your email first. We can send a new code.', code: 'unverified' });
-    if (user.status === 'pending' && !user.sub) { user.payToken = uid(18); save(); return send(res, 403, { error: 'Choose your plan and pay to finish registration.', code: 'unpaid', payToken: user.payToken, email: user.email }); }
+    if (user.status === 'pending' && !user.sub && !user.trialRequested) { user.payToken = uid(18); save(); return send(res, 403, { error: 'Choose your plan and pay to finish registration.', code: 'unpaid', payToken: user.payToken, email: user.email }); }
     if (user.status === 'pending') return send(res, 403, { error: 'Your account is waiting for Lumen’s approval. We’ll email you once it’s approved.' });
     if (user.status === 'rejected') return send(res, 403, { error: `Your registration was not approved${user.note ? ': ' + user.note : '.'}` });
     if (user.status === 'disabled') return send(res, 403, { error: 'This account is turned off. Contact Lumen support.' });
@@ -292,13 +368,15 @@ async function apiRoute(req, res, url) {
     const pp = pwProblem(b.password); if (pp) errs.push(pp);
     const t = b.theatre || {};
     if (t.mode === 'existing' && !/^c\d+t\d+$/.test(t.theatreId || '')) errs.push('Pick your theatre.');
-    if (t.mode === 'new' && (String(t.name || '').trim().length < 3 || String(t.area || '').trim().length < 2 || !t.cityId || !Array.isArray(t.screens) || !t.screens.length)) errs.push('Fill in your theatre name, area, city and screens.');
+    if (t.mode === 'new' && (String(t.name || '').trim().length < 3 || String(t.area || '').trim().length < 2 || !(t.cityId || String(t.cityName || '').trim().length >= 2) || !Array.isArray(t.screens) || !t.screens.length)) errs.push('Fill in your theatre name, area, city and screens.');
+    if (t.mode === 'new' && t.cityId && cityIndex(t.cityId) < 0) errs.push('Pick your city from the list, or type a new one.');
+    const geo = t.lat != null && Math.abs(+t.lat) <= 90 && Math.abs(+t.lng) <= 180 && !Number.isNaN(+t.lat) ? { lat: +t.lat, lng: +t.lng } : null;
     if (!['existing', 'new'].includes(t.mode)) errs.push('Tell us about your theatre.');
     if (errs.length) return send(res, 400, { error: errs.join(' ') });
     const existing = db.users.find((x) => x.email === email);
     if (existing && existing.status !== 'unverified') return send(res, 409, { error: 'An account with this email already exists. Sign in or reset your password.' });
     const rec = { id: existing?.id || uid(), email, name: String(b.name).trim(), phone: String(b.phone), role: 'partner', status: 'unverified', theatreIds: [],
-      request: t.mode === 'existing' ? { mode: 'existing', theatreId: t.theatreId } : { mode: 'new', cityId: t.cityId, name: String(t.name).trim(), area: String(t.area).trim(), screens: t.screens.slice(0, 8).map((s) => ({ name: String(s.name || 'Screen').slice(0, 30), hall: ['classic', 'imax', 'lounge', 'single', 'multiplex'].includes(s.hall) ? s.hall : 'multiplex', fmt: String(s.fmt || '2D').slice(0, 20) })) },
+      request: t.mode === 'existing' ? { mode: 'existing', theatreId: t.theatreId } : { mode: 'new', cityId: t.cityId || null, cityName: t.cityId ? null : String(t.cityName).trim().slice(0, 40), state: String(t.state || '').trim().slice(0, 40), geo, name: String(t.name).trim(), area: String(t.area).trim(), screens: t.screens.slice(0, 8).map((s) => ({ name: String(s.name || 'Screen').slice(0, 30), hall: ['classic', 'imax', 'lounge', 'single', 'multiplex'].includes(s.hall) ? s.hall : 'multiplex', fmt: String(s.fmt || '2D').slice(0, 20) })) },
       ...hashPw(b.password), createdAt: Date.now() };
     if (existing) Object.assign(existing, rec); else db.users.push(rec);
     save();
@@ -347,20 +425,29 @@ async function apiRoute(req, res, url) {
   }
 
   /* ---- partner plans & payments ---- */
-  if (p === 'billing/plans' && m === 'GET') { const pl = plans(); return send(res, 200, { monthly: pl.monthly, yearly: pl.yearly, graceDays: pl.graceDays, gateway: RZP() ? 'razorpay' : 'demo' }); }
   // Who is paying: a signed-in partner (renewal) or a new partner finishing registration (payToken)
   const payer = async (b) => {
+    if (u && u.ownerId) return null; // staff cannot pay or start trials; the owner does
     if (u && u.role === 'partner') return u;
     const t = String(b.payToken || ''); return t.length > 10 ? db.users.find((x) => x.payToken === t && x.role === 'partner' && ['pending', 'active'].includes(x.status)) : null;
   };
+  if (p === 'billing/plans' && m === 'GET') { const pl = plans(); return send(res, 200, { monthly: pl.monthly, yearly: pl.yearly, graceDays: pl.graceDays, trialDays: pl.trialDays, gstPct: pl.gstPct, gateway: RZP() ? 'razorpay' : 'demo' }); }
+  // New theatres: start with a free trial (begins when Lumen approves the theatre)
+  if (p === 'billing/trial' && m === 'POST') {
+    const b = await body(req); const user = await payer(b);
+    if (!user) return send(res, 401, { error: 'Please sign in again.' });
+    if (user.trialUsed || user.sub) return send(res, 400, { error: 'Your free trial has already been used. Choose a plan.' });
+    user.trialRequested = true; save();
+    return send(res, 200, { ok: true, trialDays: plans().trialDays, status: user.status });
+  }
   if (p === 'billing/order' && m === 'POST') {
     const b = await body(req); const user = await payer(b);
-    if (!user) return send(res, 401, { error: 'Please sign in again to pay.' });
+    if (!user) return send(res, u?.ownerId ? 403 : 401, { error: u?.ownerId ? 'Only the theatre owner can pay for the plan.' : 'Please sign in again to pay.' });
     const pl = plans()[b.plan]; if (!pl || !pl.days) return send(res, 400, { error: 'Pick monthly or yearly.' });
     if (limited('pay|' + user.id, 10, 60 * 60000)) return send(res, 429, { error: 'Too many payment attempts. Try again in an hour.' });
-    const pay = { id: 'PAY' + uid(6).toUpperCase().replace(/[^A-Z0-9]/g, 'X'), userId: user.id, email: user.email, plan: pl.id, amount: pl.amount, status: 'created', gateway: RZP() ? 'razorpay' : 'demo', createdAt: Date.now() };
+    const pay = { id: 'PAY' + uid(6).toUpperCase().replace(/[^A-Z0-9]/g, 'X'), userId: user.id, email: user.email, plan: pl.id, amount: pl.amount, base: pl.base, gst: pl.gst, status: 'created', gateway: RZP() ? 'razorpay' : 'demo', createdAt: Date.now() };
     if (RZP()) {
-      try { const o = await rzpOrder(pl.amount * 100, pay.id, { plan: pl.id, email: user.email }); pay.orderId = o.id; }
+      try { const o = await rzpOrder(Math.round(pl.amount * 100), pay.id, { plan: pl.id, email: user.email }); pay.orderId = o.id; }
       catch (e) { return send(res, 502, { error: e.message }); }
     }
     db.payments.unshift(pay); save();
@@ -383,9 +470,121 @@ async function apiRoute(req, res, url) {
     return send(res, 200, { ok: true, sub: user.sub, status: user.status });
   }
 
+  /* ---- customers: sign in with mobile OTP ---- */
+  if (p === 'auth/phone-otp' && m === 'POST') {
+    const { phone } = await body(req); const ph = String(phone || '').replace(/\D/g, '').slice(-10);
+    if (!/^[6-9]\d{9}$/.test(ph)) return send(res, 400, { error: 'Enter a 10-digit mobile number.' });
+    if (limited('potp|' + ph, 1, 45000)) return send(res, 429, { error: 'Please wait a little before asking for another code.' });
+    if (limited('potph|' + ph, 6, 60 * 60000) || limited('potip|' + ip(req), 20, 60 * 60000)) return send(res, 429, { error: 'Too many codes asked for. Try again in an hour.' });
+    const code = String(crypto.randomInt(0, 1e6)).padStart(6, '0');
+    otps.set(ph + '|login', { hash: crypto.createHash('sha256').update(code).digest('hex'), exp: Date.now() + 10 * 60000, tries: 0 });
+    try { const r = await sendPhoneOtp(ph, code); return send(res, 200, { ok: true, sent: r.sent, via: r.via }); }
+    catch (e) { return send(res, 502, { error: 'Could not send the code. ' + e.message }); }
+  }
+  if (p === 'auth/phone-login' && m === 'POST') {
+    const { phone, otp, name, email: em, client } = await body(req); const ph = String(phone || '').replace(/\D/g, '').slice(-10);
+    const err = useOtp(ph, 'login', otp); if (err) return send(res, 400, { error: err });
+    let c = db.users.find((x) => x.role === 'customer' && x.phone === ph);
+    if (!c) { c = { id: uid(), role: 'customer', status: 'active', phone: ph, name: String(name || '').trim().slice(0, 60), email: emailOk(normEmail(em)) ? normEmail(em) : '', createdAt: Date.now() }; db.users.push(c); }
+    if (c.status !== 'active') return send(res, 403, { error: 'This account is turned off. Contact Lumen support.' });
+    // Tickets booked on this device before signing in now belong to the account
+    if (client) for (const b of db.bookings) if (b.client === client && !b.userId) b.userId = c.id;
+    startSession(req, res, c); save();
+    return send(res, 200, { user: publicUser(c) });
+  }
+  if (p === 'auth/profile' && m === 'POST') {
+    if (!need()) return;
+    const { name, email: em } = await body(req);
+    if (name != null) u.name = String(name).trim().slice(0, 60);
+    if (em != null && u.role === 'customer') { const e2 = normEmail(em); if (e2 && !emailOk(e2)) return send(res, 400, { error: 'Enter a valid email.' }); u.email = e2; }
+    save(); return send(res, 200, { user: publicUser(u) });
+  }
+
+  /* ---- contact messages from the website ---- */
+  if (p === 'contact' && m === 'POST') {
+    const b = await body(req);
+    if (limited('contact|' + ip(req), 5, 60 * 60000)) return send(res, 429, { error: 'Too many messages. Please try again later.' });
+    const email = normEmail(b.email), text = String(b.message || '').trim();
+    if (String(b.name || '').trim().length < 2 || !emailOk(email) || text.length < 5) return send(res, 400, { error: 'Enter your name, a valid email and your message.' });
+    const msg = { id: uid(6), name: String(b.name).trim().slice(0, 60), email, phone: String(b.phone || '').replace(/\D/g, '').slice(-10), topic: String(b.topic || 'General').slice(0, 40),
+      bookingId: String(b.bookingId || '').slice(0, 20), message: text.slice(0, 3000), status: 'open', replies: [], at: Date.now(), userId: u?.id || null };
+    db.messages.unshift(msg); save();
+    const to = cfg('contact', 'email') || db.users.find((x) => x.role === 'admin')?.email;
+    if (to) sendMail(to, `[Lumen contact] ${msg.topic}: ${msg.name}`, `${msg.name} <${msg.email}> ${msg.phone ? '+91 ' + msg.phone : ''}\r\n${msg.bookingId ? 'Booking: ' + msg.bookingId + '\r\n' : ''}\r\n${msg.message}\r\n\r\nReply from Admin console → Messages.`).catch(() => {});
+    sendMail(msg.email, 'We got your message · Lumen Cinemas', `Hi ${msg.name},\r\n\r\nThanks for writing to Lumen. We usually reply within one working day.\r\n\r\nYour message:\r\n${msg.message}\r\n\r\nLumen Cinemas`).catch(() => {});
+    return send(res, 200, { ok: true, id: msg.id });
+  }
+  if (p === 'admin/messages' && m === 'GET') { if (!need('admin')) return; return send(res, 200, { messages: db.messages }); }
+  if ((mm = /^admin\/messages\/([\w-]+)$/.exec(p)) && m === 'POST') {
+    if (!need('admin')) return;
+    const msg = db.messages.find((x) => x.id === mm[1]); if (!msg) return send(res, 404, { error: 'No such message.' });
+    const { action, text } = await body(req);
+    if (action === 'reply') {
+      const t = String(text || '').trim(); if (t.length < 2) return send(res, 400, { error: 'Write your reply.' });
+      try { await sendMail(msg.email, `Re: ${msg.topic} · Lumen Cinemas`, `Hi ${msg.name},\r\n\r\n${t}\r\n\r\n— ${u.name || 'Lumen'}, Lumen Cinemas\r\n\r\n> ${msg.message.replace(/\n/g, '\r\n> ')}`); }
+      catch (e) { return send(res, 502, { error: 'Email could not be sent: ' + e.message }); }
+      msg.replies.push({ text: t, by: u.email, at: Date.now() }); msg.status = 'replied';
+    } else if (action === 'close') msg.status = 'closed';
+    else if (action === 'open') msg.status = 'open';
+    else return send(res, 400, { error: 'Unknown action' });
+    save(); return send(res, 200, { message: msg });
+  }
+
+  /* ---- theatre staff (added by the owner) ---- */
+  if (p === 'team' && m === 'GET') { if (!need('partner')) return; return send(res, 200, { staff: db.users.filter((x) => x.ownerId === u.id).map(publicUser) }); }
+  if (p === 'team' && m === 'POST') {
+    if (!need('partner')) return;
+    const b = await body(req); const email = normEmail(b.email), role = b.role === 'viewer' ? 'viewer' : 'manager';
+    if (String(b.name || '').trim().length < 2 || !emailOk(email)) return send(res, 400, { error: 'Enter the staff member’s name and email.' });
+    if (db.users.some((x) => x.email === email)) return send(res, 409, { error: 'Someone already uses this email on Lumen.' });
+    if (db.users.filter((x) => x.ownerId === u.id).length >= 20) return send(res, 400, { error: 'You can add up to 20 staff.' });
+    const pw = uid(12);
+    const st = { id: uid(), email, name: String(b.name).trim().slice(0, 60), phone: '', role: 'partner', ownerId: u.id, staffRole: role, status: 'active', theatreIds: u.theatreIds, ...hashPw(pw), createdAt: Date.now() };
+    db.users.push(st); save();
+    sendMail(email, 'You were added to Lumen Partners', `Hi ${st.name},\r\n\r\n${u.name} added you as ${role === 'manager' ? 'a manager' : 'a viewer'} for their theatre on Lumen.\r\nTo sign in, open the Lumen website, go to Sign in → Forgot password, enter ${email} and set your own password.\r\n\r\nLumen Cinemas`).catch(() => {});
+    return send(res, 200, { user: publicUser(st) });
+  }
+  if ((mm = /^team\/([\w-]+)$/.exec(p)) && m === 'POST') {
+    if (!need('partner')) return;
+    const st = db.users.find((x) => x.id === mm[1] && x.ownerId === u.id); if (!st) return send(res, 404, { error: 'No such staff member.' });
+    const { action, role } = await body(req);
+    if (action === 'remove') { db.users = db.users.filter((x) => x !== st); for (const [k, s2] of Object.entries(db.sessions)) if (s2.userId === st.id) delete db.sessions[k]; }
+    else if (action === 'role') st.staffRole = role === 'viewer' ? 'viewer' : 'manager';
+    else return send(res, 400, { error: 'Unknown action' });
+    save(); return send(res, 200, { ok: true });
+  }
+
+  /* ---- admin: keys & settings ---- */
+  if (p === 'admin/settings' && m === 'GET') { if (!need('admin')) return; return send(res, 200, maskedSettings()); }
+  if (p === 'admin/settings' && m === 'PUT') {
+    if (!need('admin')) return;
+    const v = await body(req);
+    for (const [g, keys] of Object.entries(SETTING_FIELDS)) {
+      if (!v[g]) continue; db.settings[g] ||= {};
+      for (const k of keys) {
+        if (!(k in v[g])) continue;
+        const val = String(v[g][k] ?? '').trim();
+        if (SECRET_KEYS[g]?.includes(k) && (val.startsWith('••••') || val === '')) { if (v[g][k] === null) delete db.settings[g][k]; continue; } // keep the saved secret
+        db.settings[g][k] = val.slice(0, 500);
+      }
+    }
+    save(); return send(res, 200, maskedSettings());
+  }
+  if (p === 'admin/settings/test' && m === 'POST') {
+    if (!need('admin')) return;
+    const { kind, to } = await body(req);
+    try {
+      if (kind === 'email') { const r = await sendMail(normEmail(to) || u.email, 'Lumen test email', 'This is a test email from your Lumen admin console. Email is working.'); return send(res, 200, { ok: true, sent: r.sent }); }
+      const ph = String(to || '').replace(/\D/g, '').slice(-10); if (!/^[6-9]\d{9}$/.test(ph)) return send(res, 400, { error: 'Enter a 10-digit mobile number to test.' });
+      if (kind === 'whatsapp') { const r = await sendWhatsApp(ph, cfg('whatsapp', 'ticketTemplate'), ['TEST123', 'Lumen test ticket', 'Today, 7:00 PM', 'Lumen Talkies', 'A1, A2']); return send(res, 200, { ok: true, sent: r.sent }); }
+      if (kind === 'sms') { const r = await sendPhoneOtp(ph, '123456'); return send(res, 200, { ok: true, sent: r.sent, via: r.via }); }
+      if (kind === 'razorpay') { if (!RZP()) return send(res, 400, { error: 'Add both Razorpay keys first.' }); const o = await rzpOrder(100, 'test' + Date.now(), { test: 'yes' }); return send(res, 200, { ok: true, order: o.id }); }
+    } catch (e) { return send(res, 502, { error: e.message }); }
+    return send(res, 400, { error: 'Unknown test' });
+  }
+
   /* ---- admin: partners ---- */
   if (p === 'admin/users' && m === 'GET') { if (!need('admin')) return; return send(res, 200, { users: db.users.map(publicUser) }); }
-  let mm;
   if ((mm = /^admin\/users\/([\w-]+)$/.exec(p)) && m === 'POST') {
     if (!need('admin')) return;
     const { action, note, theatreIds, days } = await body(req);
@@ -395,14 +594,21 @@ async function apiRoute(req, res, url) {
       const rq = user.request || {};
       if (!ids.length && rq.mode === 'existing') ids = [rq.theatreId];
       if (!ids.length && rq.mode === 'new') {
-        const ci = Math.max(0, +String(rq.cityId).replace(/\D/g, '') || 0);
-        const cityIdx = ['chennai', 'coimbatore', 'madurai', 'bengaluru', 'kochi'].indexOf(rq.cityId);
-        const inCity = db.newTheatres.filter((t) => t.cityId === rq.cityId).length;
-        const id = `c${cityIdx < 0 ? ci : cityIdx}t${4 + inCity}`;
-        db.newTheatres.push({ id, cityId: rq.cityId, name: rq.name, area: rq.area, screens: rq.screens, addedAt: Date.now() });
+        let cityId = rq.cityId;
+        if (!cityId) {
+          // A city Lumen did not have yet: add it (customers see it from now on)
+          const slug = String(rq.cityName).toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'city';
+          cityId = BASE_CITIES.includes(slug) || db.cities.some((c) => c.id === slug) ? slug : slug;
+          if (cityIndex(cityId) < 0) db.cities.push({ id: cityId, en: rq.cityName, ta: rq.cityName, state: rq.state || '', lat: rq.geo?.lat ?? null, lng: rq.geo?.lng ?? null, areas: [rq.area], addedAt: Date.now() });
+        }
+        const inCity = db.newTheatres.filter((t) => t.cityId === cityId).length;
+        const base = BASE_CITIES.includes(cityId) ? 4 : 0;
+        const id = `c${cityIndex(cityId)}t${base + inCity}`;
+        db.newTheatres.push({ id, cityId, name: rq.name, area: rq.area, screens: rq.screens, lat: rq.geo?.lat ?? null, lng: rq.geo?.lng ?? null, addedAt: Date.now() });
         ids = [id];
       }
       user.status = 'active'; user.theatreIds = ids; user.note = note || '';
+      if (!user.sub && user.trialRequested && !user.trialUsed) { user.sub = { plan: 'trial', amount: 0, since: Date.now(), until: Date.now() + plans().trialDays * DAY }; user.trialUsed = true; }
       sendMail(user.email, 'Your Lumen partner account is approved', `Hi ${user.name},\r\n\r\nYour Lumen partner account is approved. Sign in to manage your shows, prices and seat layouts.\r\n\r\nLumen Cinemas`).catch(() => {});
     } else if (action === 'reject') { if (!note || note.length < 5) return send(res, 400, { error: 'Add a short reason.' }); user.status = 'rejected'; user.note = note; }
     else if (action === 'disable') { user.status = 'disabled'; for (const [k, s] of Object.entries(db.sessions)) if (s.userId === user.id) delete db.sessions[k]; }
@@ -520,14 +726,25 @@ async function apiRoute(req, res, url) {
       if (taken.length) return send(res, 409, { error: 'Some seats were just taken', taken });
       const hm = holds.get(b.showId); if (hm) for (const s of b.seats) hm.delete(s);
     }
+    if (u && u.role === 'customer') b.userId = u.id;
     db.bookings.unshift(b); save();
+    notifyTicket(b).catch((e) => console.log('Ticket message failed:', e.message));
     return send(res, 200, { ok: true });
   }
   if (m === 'POST' && p === 'cancel') {
     const { id, refund, client } = await body(req); const b = db.bookings.find((x) => x.id === id);
     if (!b) return send(res, 404, { error: 'No such booking' });
-    if (b.client !== client && !(u && (u.role === 'admin' || (b.theatreId && ownsTheatre(u, b.theatreId))))) return send(res, 403, { error: 'Not your booking.' });
-    b.cancelled = true; b.refund = Math.max(0, +refund || 0); b.cancelledAt = Date.now(); save();
+    const staffSide = u && (u.role === 'admin' || (b.theatreId && ownsTheatre(u, b.theatreId)));
+    if (b.client !== client && !(u && b.userId === u.id) && !staffSide) return send(res, 403, { error: 'Not your booking.' });
+    if (b.cancelled) return send(res, 400, { error: 'This booking is already cancelled.' });
+    let amount = Math.max(0, +refund || 0);
+    if (!staffSide) {
+      // Customers: online cancellation up to 1 hour before the show, 75% of the ticket price back
+      const start = showStartMs(b.showId);
+      if (b.kind === 'movie' && (!start || start - Date.now() < 3600000)) return send(res, 400, { error: 'Online cancellation closes 1 hour before the show.' });
+      amount = Math.min(amount, Math.round((+b.ticketAmount || 0) * 0.75));
+    }
+    b.cancelled = true; b.refund = amount; b.cancelledAt = Date.now(); save();
     return send(res, 200, { ok: true });
   }
   return send(res, 404, { error: 'Unknown API route' });

@@ -1,6 +1,6 @@
 // Lumen Cinemas: screens, routing and the full booking flow.
 import {
-  CITIES, MOVIES, CLASS_META, SNACKS, FEE_PER_TICKET, CONV_FEE, GST, HOLD_MINUTES, OFFERS, EVENT_CATS, EVENTS, PREMIERES,
+  CITIES, MOVIES, CLASS_META, SNACKS, FEE_PER_TICKET, CONV_FEE, GST, COMMISSION, HOLD_MINUTES, OFFERS, EVENT_CATS, EVENTS, PREMIERES,
   movieById, eventById, premiereById, isNowShowing, theatresFor, theatreById, showsFor, showById, today, addDays, dayKey, fromKey,
   hmLabel, partOfDay, releaseDate, mulberry32, hash, leavingSoon, liveBanners, nearestCity, LIVE,
 } from './data.js';
@@ -8,6 +8,7 @@ import { HALLS, getLayout, buildLayout, layoutOf, pricesOf, layoutFor, pricesFor
 import { mountMap } from './map2d.js';
 import { t, tx, state, icon, inr, esc, clsName, poster, posterArt, ticketArt, $, $$, toast, fmtDate, compact, deviceTier } from './ui.js';
 import { loginView, forgotView, registerView, openAccount, gate } from './auth.js';
+import { customerSignIn, customerAccount, invoiceView, contactView, policyView } from './pages.js';
 import { createAgent } from './agent.js';
 import { adminView as renderAdmin } from './admin.js';
 import { partnerView as renderPartner } from './partner.js';
@@ -68,8 +69,11 @@ function renderHeader() {
   const n = S.bookings.filter((b) => !b.cancelled).length;
   $('#ticketsBtn').innerHTML = `${icon('ticket')}<span class="hide-sm">${t('my_tickets')}</span>${n ? `<i class="badge">${n}</i>` : ''}`;
   $('#askFab').innerHTML = `${icon('mic')}<span>${t('voice')}</span>`;
-  const me = db.me; $('#acctBtn').hidden = !me;
-  if (me) { $('#acctBtn').innerHTML = icon('user'); $('#acctBtn').setAttribute('aria-label', `Account: ${me.name}`); }
+  // Account button: sign in for customers (mobile OTP), or the signed-in person's account
+  const me = db.me; $('#acctBtn').hidden = db.mode !== 'server' && !me;
+  $('#acctBtn').classList.toggle('icon-only', !!me);
+  $('#acctBtn').innerHTML = me ? icon('user') : `${icon('user')}<span class="hide-sm">${state.lang === 'ta' ? 'உள்நுழை' : 'Sign in'}</span>`;
+  $('#acctBtn').setAttribute('aria-label', me ? `Account: ${me.name || me.phone || me.email}` : 'Sign in');
   const cur = (location.hash.slice(1) || 'home');
   $('#cats').innerHTML = CATS.map(([r, en, ta]) => `<a href="#${r}" ${cur === r || (r === 'home' && /^(movie|shows|show)-/.test(cur)) ? 'aria-current="page"' : ''}>${state.lang === 'ta' ? ta : en}</a>`).join('');
   document.documentElement.lang = state.lang === 'ta' ? 'ta' : 'en';
@@ -87,6 +91,9 @@ function route() {
   if (h === 'home') return homeView();
   if ((m = /^login(?:-(.+))?$/.exec(h))) return loginView(view, panelCtx(), m[1] ? '#' + decodeURIComponent(m[1]) : '');
   if (h === 'forgot') return forgotView(view, panelCtx());
+  if ((m = /^invoice-([A-Z0-9]+)$/.exec(h))) { const b = S.bookings.find((x) => x.id === m[1]); return b ? invoiceView(view, b) : ticketsView(); }
+  if (h === 'contact') return contactView(view, panelCtx(), S.bookings);
+  if (['terms', 'privacy', 'refunds'].includes(h)) return policyView(view, h);
   if (h === 'register-pay') return registerView(view, panelCtx(), '@pay');
   if ((m = /^register(?:-verify-(.+))?$/.exec(h))) return registerView(view, panelCtx(), m[1] ? decodeURIComponent(m[1]) : '');
   if ((m = /^movie-([a-z0-9]+)$/.exec(h))) return movieView(m[1]);
@@ -185,7 +192,7 @@ function homeView() {
       <div class="foot-cols">
         <div><a class="logo" href="#home"><span class="logo-dot"></span>Lumen</a><p class="muted">${L('See the view from your seat before you book.', 'பதிவுக்கு முன் உங்கள் இருக்கையிலிருந்து காட்சியைப் பாருங்கள்.')}</p></div>
         <div><b>${L('Movies', 'படங்கள்')}</b><a href="#home">${t('now')}</a><a href="#cat-stream">Premiere</a>${CITIES.map((c) => `<button type="button" class="link" data-city="${c.id}">${esc(tx(c))}</button>`).join('')}</div>
-        <div><b>${L('Help', 'உதவி')}</b><a href="#tickets">${t('my_tickets')}</a><button type="button" class="link" data-ask="">${t('voice')}</button></div>
+        <div><b>${L('Help', 'உதவி')}</b><a href="#tickets">${t('my_tickets')}</a><button type="button" class="link" data-ask="">${t('voice')}</button><a href="#contact">${L('Contact us', 'தொடர்பு கொள்ள')}</a><a href="#refunds">${L('Cancellation & refunds', 'ரத்து & பணம் திரும்ப')}</a><a href="#terms">${L('Terms', 'விதிமுறைகள்')}</a><a href="#privacy">${L('Privacy', 'தனியுரிமை')}</a></div>
         <div><b>${L('Business', 'வணிகம்')}</b><a href="#register">${L('List your theatre', 'திரையரங்கைச் சேர்')}</a><a href="#login">${L('Partner & admin sign in', 'பங்குதாரர் / நிர்வாகி உள்நுழைவு')}</a></div>
       </div>
       <p class="foot-note">© ${new Date().getFullYear()} Lumen Cinemas · ${L('All movies, theatres and events are fictional demo data. No money is taken.', 'அனைத்தும் மாதிரி தரவு.')} · ${db.mode === 'server' ? L('Live data', 'நேரடி தரவு') : L('Demo data saved in this browser', 'இந்த உலாவியில் சேமிக்கப்பட்ட தரவு')}</p>
@@ -651,7 +658,7 @@ const TERMS = [
   'Outside food and drinks are not allowed.',
   'Bags, helmets and laptops may be checked at entry.',
   'Entry may be refused to anyone under the influence of alcohol or drugs.',
-  'Cancellation: 75% of the ticket price back up to 4 hours before the show, 50% up to 2 hours before, none after that. Fees are not refunded.',
+  'Cancellation: cancel online up to 1 hour before the show and get 75% of the ticket price back to your payment method. No refund in the last hour. Booking fees are not refunded.',
 ];
 let currentOrder = null;
 async function startCheckout(order) {
@@ -741,12 +748,12 @@ function payView() {
     const payable = p.total - pts;
     $('#summary').innerHTML = `
       <div class="tk-top" style="--c1:${o.c1};--c2:${o.c2};border-radius:12px;grid-template-columns:minmax(0,1fr) auto"><div><b>${esc(o.title)}</b><small>${esc(o.sub)}</small><small>${esc(o.detail)}</small>${o.seats ? `<small>${esc(o.seats.join(', '))}</small>` : ''}<small>${esc(o.place)}</small></div><b style="font-size:22px">${o.qty}</b></div>
-      ${o.cancellable ? `<div class="cancel-ok"><b>${state.lang === 'ta' ? 'ரத்து செய்யலாம்' : 'Cancellation available'}</b>${state.lang === 'ta' ? 'காட்சிக்கு 4 மணி நேரம் முன் வரை 75% திரும்ப.' : '75% of the ticket price back up to 4 hours before the show.'}</div>` : ''}
+      ${o.cancellable ? `<div class="cancel-ok"><b>${state.lang === 'ta' ? 'ரத்து செய்யலாம்' : 'Cancellation available'}</b>${state.lang === 'ta' ? 'காட்சிக்கு 1 மணி நேரம் முன் வரை 75% திரும்ப.' : '75% of the ticket price back if you cancel up to 1 hour before the show.'}</div>` : ''}
       <table class="sum"><tbody>
         ${o.lines.map((l) => `<tr><td>${esc(l.label)}${l.sub ? `<small>${esc(l.sub)}</small>` : ''}</td><td>${money(l.amount)}</td></tr>`).join('')}
         ${p.food ? `<tr><td>${state.lang === 'ta' ? 'உணவு & பானம்' : 'Food & beverages'}<small>${o.pickup === 'interval' ? (state.lang === 'ta' ? 'இடைவேளையில் வாங்கலாம்' : 'Pick up at the interval') : (state.lang === 'ta' ? 'படத்திற்கு முன்' : 'Pick up before the show')}</small></td><td>${money(p.food)}</td></tr>` : ''}
         ${p.conv ? `<tr><td><button type="button" class="link" id="feeTog" style="color:var(--fg)">${state.lang === 'ta' ? 'வசதிக் கட்டணம்' : 'Convenience fees'} ${icon('chev')}</button></td><td>${money(p.conv + p.gst)}</td></tr>
-        ${P.feesOpen ? `<tr class="sub"><td>Base fee (${inr(CONV_FEE)} × ${o.qty})</td><td>${money(p.conv)}</td></tr><tr class="sub"><td>GST @ 18%</td><td>${money(p.gst)}</td></tr>` : ''}` : ''}
+        ${P.feesOpen ? `<tr class="sub"><td>Base fee (${inr(CONV_FEE)} × ${o.qty})</td><td>${money(p.conv)}</td></tr>${p.gst ? `<tr class="sub"><td>GST @ ${Math.round(GST * 100)}%</td><td>${money(p.gst)}</td></tr>` : ''}` : ''}` : ''}
         ${o.kind !== 'rent' ? `<tr><td>${state.lang === 'ta' ? 'இசைக் கலைஞர்களுக்கு நன்கொடை' : 'Give to young musicians'}<small>₹1 per ticket</small></td><td><button type="button" class="switch" role="switch" aria-checked="${P.donate}" id="donTog" aria-label="Donate"></button></td></tr>` : ''}
         ${p.disc ? `<tr class="disc"><td>Offer ${esc(P.offer.code)}</td><td>− ${money(p.disc)}</td></tr>` : ''}
         ${pts ? `<tr class="disc"><td>Points</td><td>− ${money(pts)}</td></tr>` : ''}
@@ -798,6 +805,8 @@ async function saveBooking(o, method, total, extra = {}) {
   if (o.kind === 'movie') { const sh = showById(o.showId); if (sh) { const pr = pricesOf(sh), lay = layoutOf(sh); b.theatreId = sh.theatreId; b.ticketAmount = b.seats.reduce((a, id) => a + (pr[lay.byId.get(id)?.cls] || 0), 0); } }
   else if (o.kind === 'event') b.ticketAmount = o.lines.reduce((a, l) => a + l.amount, 0);
   else b.ticketAmount = o.lines.reduce((a, l) => a + l.amount, 0);
+  b.commissionPct = COMMISSION * 100;
+  const info = ticketInfo(b); if (info) b.summary = { title: info.title, when: info.when, place: info.where, seats: (b.seats || []).join(', ') || info.rows[0]?.[1] || '' };
   const r = await db.book(b);
   if (!r.ok) return null;
   renderHeader();
@@ -811,7 +820,7 @@ function refundFor(b) {
   const hrs = (showStart(show) - Date.now()) / 3600000;
   const lay = layoutOf(show), prices = pricesOf(show);
   const ticket = b.seats.reduce((a, id) => a + (prices[lay.byId.get(id)?.cls] || 0), 0);
-  const pct = hrs > 4 ? 0.75 : hrs > 2 ? 0.5 : 0;
+  const pct = hrs >= 1 ? 0.75 : 0; // online cancellation up to 1 hour before the show
   return { pct, amount: Math.round(ticket * pct) };
 }
 function ticketInfo(b) {
@@ -854,7 +863,8 @@ function ticketView(id) {
     ${ticketHTML(b, true)}
     <div class="done-actions">${b.cancelled ? '' : b.kind === 'movie' ? `<button type="button" class="btn primary" id="tkView">${icon('eye')}${t('see_view')}</button>` : b.kind === 'rent' ? `<button type="button" class="btn primary" id="tkWatch">${icon('play')}${state.lang === 'ta' ? 'மெய்நிகர் அரங்கில் பார்' : 'Watch in a virtual theatre'}</button>` : ''}
       <button type="button" class="btn ghost" id="tkCopy">${t('copy')}</button>
-      ${!b.cancelled && rf ? `<button type="button" class="btn ghost danger" id="tkCancel">${t('cancel')} · ${rf.amount ? `${inr(rf.amount)} back` : 'no refund now'}</button>` : ''}</div></section>`;
+      ${!b.cancelled && rf ? (rf.pct ? `<button type="button" class="btn ghost danger" id="tkCancel">${t('cancel')} · ${inr(rf.amount)} back</button>` : `<span class="muted small">${state.lang === 'ta' ? 'காட்சிக்கு 1 மணி நேரத்திற்குள் ரத்து செய்ய முடியாது.' : 'Online cancellation closes 1 hour before the show.'}</span>`) : ''}
+      ${b.kind === 'movie' && !b.cancelled ? `<a class="btn ghost" href="#invoice-${b.id}">${icon('ticket')}${state.lang === 'ta' ? 'விலைப்பட்டியல்' : 'Invoice'}</a>` : ''}</div></section>`;
   const q = $('.qr', view); if (q) drawQR(q, b.id);
   $('#tkView')?.addEventListener('click', () => {
     const sel = new Set(b.seats);
@@ -868,12 +878,17 @@ function ticketView(id) {
     const txt = `${info.title} · ${info.when} · ${info.where} · ${info.rows.map((r) => r.join(': ')).join(' · ')} · Booking ${b.id}`;
     navigator.clipboard?.writeText(txt).then(() => toast(t('copied')), () => toast(txt));
   });
-  $('#tkCancel')?.addEventListener('click', async () => { await db.cancel(b.id, rf.amount); renderHeader(); toast(`${t('cancelled')} ${rf.amount ? inr(rf.amount) + ' will reach your account in 5–7 days.' : ''}`); ticketView(id); });
+  $('#tkCancel')?.addEventListener('click', async () => {
+    if (!confirm(`Cancel booking ${b.id}? ${inr(rf.amount)} (75% of the ticket price) will be refunded. Booking fees are not refunded.`)) return;
+    try { await db.cancel(b.id, rf.amount); } catch (e) { toast(e.message); return; }
+    renderHeader(); toast(`${t('cancelled')} ${rf.amount ? inr(rf.amount) + ' will reach your account in 5–7 days.' : ''}`); ticketView(id); });
 }
 function ticketsView() {
   const list = S.bookings.filter((b) => ticketInfo(b));
-  view.innerHTML = `<div class="topbar"><a class="iconbtn" href="#home" aria-label="${t('back')}">${icon('back')}</a><h1 class="tb-t">${t('my_tickets')}</h1></div>
+  const nudge = db.mode === 'server' && !db.me ? `<div class="notice">${icon('user')}<span><b>${state.lang === 'ta' ? 'உள்நுழைந்தால் டிக்கெட்டுகள் எல்லா சாதனத்திலும் கிடைக்கும்.' : 'Sign in with your mobile number to keep your tickets on every phone and computer.'}</b></span><button type="button" class="btn primary sm" id="tkSign">${state.lang === 'ta' ? 'உள்நுழை' : 'Sign in'}</button></div>` : '';
+  view.innerHTML = `<div class="topbar"><a class="iconbtn" href="#home" aria-label="${t('back')}">${icon('back')}</a><h1 class="tb-t">${t('my_tickets')}</h1></div>${nudge}
     ${list.length ? `<div class="tickets">${list.map((b) => ticketHTML(b)).join('')}</div>` : `<p class="empty">${t('no_tickets')}</p>`}`;
+  $('#tkSign')?.addEventListener('click', () => customerSignIn(panelCtx()));
 }
 
 /* ---------- events, plays, sports, activities, stream ---------- */
@@ -925,7 +940,7 @@ function adminView(id) {
   renderAdmin(view, id, { city: app.city, db, tier: TIER, onLeave, openSheet, closeSheet, refreshForm: null });
 }
 // isCurrent(): false once the person has moved to another screen (async panels check it before drawing)
-const panelCtx = () => { const h = location.hash; return { city: app.city, setCity: app.setCity, db, tier: TIER, onLeave, openSheet, closeSheet, route, isCurrent: () => location.hash === h }; };
+const panelCtx = () => { const h = location.hash; return { city: app.city, setCity: app.setCity, db, tier: TIER, onLeave, openSheet, closeSheet, route, isCurrent: () => location.hash === h, contactEmail: () => S.contact.email }; };
 
 /* ---------- sheets: city, search, generic ---------- */
 function openSheet(html, bind) {
@@ -973,7 +988,7 @@ const agent = createAgent(app);
 $('#cityBtn').addEventListener('click', () => openCitySheet());
 $('#searchBtn').addEventListener('click', openSearch);
 $('#ticketsBtn').addEventListener('click', () => { location.hash = 'tickets'; });
-$('#acctBtn').addEventListener('click', () => openAccount(panelCtx()));
+$('#acctBtn').addEventListener('click', () => { const me = db.me; if (!me) customerSignIn(panelCtx()); else if (me.role === 'customer') customerAccount(panelCtx()); else openAccount(panelCtx()); });
 { const l = store.get('loc', null); if (l && Date.now() - l.at < 7 * 864e5) LIVE.userLoc = { lat: l.lat, lng: l.lng }; }
 function setThemeBtn() {
   const dark = document.documentElement.dataset.theme === 'dark';

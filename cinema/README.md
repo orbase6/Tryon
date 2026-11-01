@@ -61,7 +61,17 @@ One sign-in page for both roles. Passwords are hashed (scrypt), sessions are Htt
 
 Partner registration: your details → your theatre (already on Lumen, or a new theatre with its screens) → email code → Lumen admin approves → partner can sign in. Approving a new theatre creates it with its screens.
 
-**Partner plans:** ₹399 a month or ₹5,000 a year with 20% off (₹4,000, save ₹1,000). Prices and the discount are set in Console → Fees. New theatres pay right after verifying their email (registration step 4), before Lumen reviews them. Partners renew from **Plan & billing** (time is added after the current end date) and get an email receipt. If a plan runs out, the theatre is hidden from customers after 7 days (changeable). Admins can add free days. Payments go through Razorpay when `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` are set; otherwise they are marked demo.
+**Customers:** sign in with their mobile number (OTP by SMS through MSG91, or WhatsApp, or printed in the server window while not set up). Tickets booked before signing in move to the account, so they show on every device. Every booking is sent by email and WhatsApp. Customers can cancel online up to 1 hour before the show for 75% of the ticket price (enforced by the server). Each ticket has a tax invoice issued in the theatre's name and GSTIN (12% / 18% GST included in the ticket price, 5% on food), plus a receipt for Lumen's booking fee. Contact form → Admin → Messages (reply by email). Terms, Privacy and Refund pages are in the footer.
+
+**Admin → Settings:** Razorpay keys, email (SMTP), WhatsApp (Meta Cloud API) and SMS (MSG91) keys, and the business contact details, each with a test button. Secrets are stored on the server and only shown masked. These override `settings.env`.
+
+**Commission & GST:** Lumen keeps 0.5% of each theatre's ticket sales (shown day by day in the partner's Sales tab; editable in Console → Fees). GST on the booking fee and on plans is 0 until Lumen has a GSTIN; turn it on in Console → Fees.
+
+**Theatre staff:** owners add Managers (shows, prices, layouts, banners, sales) and Viewers (look only) in the Team tab. Only the owner can change bank details, the plan and the team.
+
+**New cities:** a theatre can register in a city Lumen does not have yet ("My city is not in this list"), with its location. When approved, the city appears for customers.
+
+**Partner plans:** 14 days free (starts when the theatre is approved), then ₹399 a month or ₹5,000 a year with 20% off (₹4,000, save ₹1,000). Prices and the discount are set in Console → Fees. New theatres pay right after verifying their email (registration step 4), before Lumen reviews them. Partners renew from **Plan & billing** (time is added after the current end date) and get an email receipt. If a plan runs out, the theatre is hidden from customers after 7 days (changeable). Admins can add free days. Payments go through Razorpay when `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` are set; otherwise they are marked demo.
 
 **Seat layout editor (for any theatre owner):** quick start with 4 answers (rows, seats per row, walkways, recliner rows, plus balcony rows), then tap seats to change them (seat, wheelchair, not for sale, empty, walkway), add/remove seats and rows, pick the seat type per row from a list, and set prices. Hall size and floor are chosen in plain words; exact metres are optional. The live preview shows the view score of every seat and a 3D walk-through.
 
@@ -153,6 +163,7 @@ settings.example.env   copy to settings.env for admin + email settings
 auth.js        sign in, forgot password (email OTP), partner registration, account
 media.js       upload boxes, movie dropdown with posters, banner preview
 billing.js     partner plans, Razorpay / demo payment, receipts
+pages.js       customer mobile sign-in, invoice, contact form, terms / privacy / refunds
 set-password.js  create an account or reset a password from the command line
 db.js          data layer: talks to server.js, or saves in the browser without it
 partner.js     theatre partner panel

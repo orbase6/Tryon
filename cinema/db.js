@@ -7,7 +7,7 @@ import { setCustomLayouts, setPriceOverrides } from './layout.js';
 
 const LS = 'lumen.db';
 const blank = () => ({ movies: [], hiddenMovies: [], schedule: {}, theatres: {}, offers: null, fees: null, layouts: {}, prices: {}, bookings: [],
-  newTheatres: [], media: { movies: {}, theatres: {} }, banners: [], me: null, billing: null, lapsed: [], payments: [] });
+  newTheatres: [], media: { movies: {}, theatres: {} }, banners: [], me: null, billing: null, lapsed: [], payments: [], cities: [], contact: {}, kycPublic: {} });
 const clientId = (() => {
   try { let id = localStorage.getItem('lumen.client'); if (!id) { id = 'u' + Math.random().toString(36).slice(2, 10); localStorage.setItem('lumen.client', id); } return id; }
   catch (e) { return 'u' + Math.random().toString(36).slice(2, 10); }
@@ -65,6 +65,21 @@ export const db = {
   changePassword(current, password) { return api('auth/password', { method: 'POST', body: { current, password } }); },
   users() { return api('admin/users').then((r) => r.users); },
   userAction(id, action, extra = {}) { return api('admin/users/' + id, { method: 'POST', body: { action, ...extra } }); },
+
+  /* ---- customers (mobile OTP) ---- */
+  phoneOtp(phone) { return api('auth/phone-otp', { method: 'POST', body: { phone } }); },
+  async phoneLogin(phone, otp, name, email) { const r = await api('auth/phone-login', { method: 'POST', body: { phone, otp, name, email, client: this.client } }); await this.refresh(); return r.user; },
+  async profile(data) { const r = await api('auth/profile', { method: 'POST', body: data }); await this.refresh(); return r.user; },
+  contact(msg) { return api('contact', { method: 'POST', body: msg }); },
+  messages() { return api('admin/messages').then((r) => r.messages); },
+  messageAction(id, action, text) { return api('admin/messages/' + id, { method: 'POST', body: { action, text } }); },
+  team() { return api('team').then((r) => r.staff); },
+  teamAdd(data) { return api('team', { method: 'POST', body: data }); },
+  teamAction(id, action, role) { return api('team/' + id, { method: 'POST', body: { action, role } }); },
+  settings() { return api('admin/settings'); },
+  saveSettings(v) { return api('admin/settings', { method: 'PUT', body: v }); },
+  testSetting(kind, to) { return api('admin/settings/test', { method: 'POST', body: { kind, to } }); },
+  startTrial(payToken) { return api('billing/trial', { method: 'POST', body: { payToken } }); },
 
   /* ---- partner plans (server only) ---- */
   plans() { return api('billing/plans'); },
@@ -128,6 +143,6 @@ export const db = {
     const b = this.state.bookings.find((x) => x.id === id); if (b) { b.cancelled = true; b.refund = refund; b.cancelledAt = Date.now(); }
     if (this.mode === 'local') this.saveLocal();
   },
-  myBookings() { return this.state.bookings.filter((b) => b.client === this.client || !b.client); },
+  myBookings() { const me = this.state.me; return this.state.bookings.filter((b) => b.client === this.client || !b.client || (me && b.userId === me.id)); },
   allBookings() { return this.state.bookings; },
 };

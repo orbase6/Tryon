@@ -11,13 +11,15 @@ export function mulberry32(a) {
 }
 export const hash = (s) => [...String(s)].reduce((a, c) => (Math.imul(a, 31) + c.charCodeAt(0)) >>> 0, 2166136261);
 
-export const CITIES = [
+export const CITIES = [ // the first 5 are built in; registration can add more
   { id: 'chennai', en: 'Chennai', ta: 'சென்னை', lat: 13.0827, lng: 80.2707, areas: ['Anna Nagar', 'Vadapalani', 'OMR', 'Velachery'] },
   { id: 'coimbatore', en: 'Coimbatore', ta: 'கோயம்புத்தூர்', lat: 11.0168, lng: 76.9558, areas: ['RS Puram', 'Gandhipuram', 'Peelamedu', 'Saibaba Colony'] },
   { id: 'madurai', en: 'Madurai', ta: 'மதுரை', lat: 9.9252, lng: 78.1198, areas: ['KK Nagar', 'Anna Nagar', 'Simmakkal', 'Bypass Road'] },
   { id: 'bengaluru', en: 'Bengaluru', ta: 'பெங்களூரு', lat: 12.9716, lng: 77.5946, areas: ['Koramangala', 'Indiranagar', 'Whitefield', 'Jayanagar'] },
   { id: 'kochi', en: 'Kochi', ta: 'கொச்சி', lat: 9.9312, lng: 76.2673, areas: ['Edappally', 'Kakkanad', 'Marine Drive', 'Vyttila'] },
 ];
+
+const BASE_CITY_COUNT = 5;
 
 // Seat classes shared by all halls
 export const CLASS_META = {
@@ -53,8 +55,8 @@ export function theatresFor(cityId, { all = false } = {}) {
   const city = CITIES[ci];
   if (!city) return [];
   const live = (id) => LIVE.theatres[id] || {};
-  const place = (id) => { const r = mulberry32(hash(id + 'geo')); return { lat: city.lat + (r() - 0.5) * 0.14, lng: city.lng + (r() - 0.5) * 0.14 }; };
-  const list = CHAINS.map((ch, i) => {
+  const place = (id) => { if (city.lat == null) return { lat: null, lng: null }; const r = mulberry32(hash(id + 'geo')); return { lat: city.lat + (r() - 0.5) * 0.14, lng: city.lng + (r() - 0.5) * 0.14 }; };
+  const list = ci >= BASE_CITY_COUNT ? [] : CHAINS.map((ch, i) => {
     const id = `c${ci}t${i}`;
     const r = mulberry32(hash(city.id + ch.key));
     return {
@@ -65,7 +67,7 @@ export function theatresFor(cityId, { all = false } = {}) {
   });
   // Theatres that joined through partner registration (approved by a Lumen admin)
   for (const nt of LIVE.newTheatres.filter((x) => x.cityId === city.id)) {
-    list.push({ id: nt.id, cityId: city.id, chain: 'partner', name: nt.name, area: nt.area, demoKm: 4 + (hash(nt.id) % 50) / 10, ...place(nt.id),
+    list.push({ id: nt.id, cityId: city.id, chain: 'partner', name: nt.name, area: nt.area, demoKm: 4 + (hash(nt.id) % 50) / 10, ...(nt.lat != null ? { lat: nt.lat, lng: nt.lng } : place(nt.id)),
       amen: [...new Set(nt.screens.map((s) => HALL_AMEN[s.hall]).filter(Boolean)), 'Parking'],
       screens: nt.screens.map((s, si) => ({ name: s.name, hall: s.hall, fmt: s.fmt, idx: si, id: `${nt.id}s${si}` })), isNew: true });
   }
@@ -74,7 +76,7 @@ export function theatresFor(cityId, { all = false } = {}) {
     th.kycStatus = live(th.id).kycStatus || 'not_submitted';
     const md = LIVE.media.theatres[th.id] || {};
     th.cover = md.cover || null; th.photos = md.photos || [];
-    th.km = LIVE.userLoc ? Math.round(kmBetween(LIVE.userLoc, th) * 10) / 10 : th.demoKm;
+    th.km = LIVE.userLoc && th.lat != null ? Math.round(kmBetween(LIVE.userLoc, th) * 10) / 10 : th.demoKm;
   }
   // Hidden from customers: suspended by Lumen, or the owner's plan has run out
   return all ? list : list.filter((t) => t.status !== 'suspended' && !LIVE.lapsed.has(t.id));
@@ -91,7 +93,7 @@ export function kmBetween(a, b) {
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(h));
 }
-export const nearestCity = (loc) => CITIES.map((c) => [c, kmBetween(loc, c)]).sort((a, b) => a[1] - b[1])[0];
+export const nearestCity = (loc) => CITIES.filter((c) => c.lat != null).map((c) => [c, kmBetween(loc, c)]).sort((a, b) => a[1] - b[1])[0];
 
 // Movies (fictional titles). rel = days from today (negative = already released)
 export const MOVIES = [
@@ -140,8 +142,11 @@ export function applyLive(st) {
   LIVE.media = { movies: {}, theatres: {}, ...(st.media || {}) };
   LIVE.banners = Array.isArray(st.banners) ? st.banners : [];
   LIVE.lapsed = new Set(st.lapsed || []);
+  LIVE.kyc = st.kycPublic || {}; LIVE.contact = st.contact || {};
+  // Cities added when theatres register in a new city
+  CITIES.splice(BASE_CITY_COUNT, CITIES.length, ...(st.cities || []).map((c) => ({ id: c.id, en: c.en, ta: c.ta || c.en, lat: c.lat, lng: c.lng, areas: c.areas || [], state: c.state || '', added: true })));
   const f = st.fees || {};
-  CONV_FEE = f.conv ?? 18; GST = f.gst ?? 0.18; HOLD_MINUTES = f.holdMinutes ?? 5;
+  CONV_FEE = f.conv ?? 18; GST = f.gst ?? 0; HOLD_MINUTES = f.holdMinutes ?? 5; COMMISSION = (f.commissionPct ?? 0.5) / 100;
   FEE_PER_TICKET = Math.round(CONV_FEE * (1 + GST));
   LIVE.demoCrowd = f.demoCrowd ?? true;
   const hidden = new Set(st.hiddenMovies || []);
@@ -302,7 +307,8 @@ const BASE_OFFERS = [
 ];
 export const OFFERS = BASE_OFFERS.slice();
 export let CONV_FEE = 18;   // base convenience fee per ticket (admin can change)
-export let GST = 0.18;      // tax on the fee
+export let GST = 0;         // tax on the fee: 0 until Lumen is GST registered (admin turns it on)
+export let COMMISSION = 0.005; // Lumen's share of each theatre's ticket sales (0.5%)
 export let HOLD_MINUTES = 5;
 export const baseOffers = () => BASE_OFFERS;
 // Money for one booking: what the theatre gets and what the platform keeps
@@ -314,6 +320,8 @@ export function bookingMoney(b) {
   const refund = b.cancelled ? b.refund || 0 : 0;
   // On cancellation the customer gets `refund` back from the ticket price and food is refunded in full;
   // the theatre keeps the rest of the ticket price, the platform keeps its fee.
-  const theatre = b.cancelled ? ticket - refund : ticket + food;
-  return { ticket, food, fees, gst, convNet, discount, donation, refund, theatre: Math.max(0, theatre), platform: convNet - discount };
+  const kept = b.cancelled ? ticket - refund : ticket;
+  const commission = Math.round(kept * (b.commissionPct ?? COMMISSION * 100)) / 100; // Lumen's 0.5% of ticket sales
+  const theatre = (b.cancelled ? kept : ticket + food) - commission;
+  return { ticket, food, fees, gst, convNet, discount, donation, refund, commission, theatre: Math.max(0, theatre), platform: convNet - discount + commission };
 }

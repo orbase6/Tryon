@@ -100,7 +100,7 @@ export function forgotView(view, ctx) {
 export function registerView(view, ctx, verifyEmail = '') {
   const { db } = ctx;
   if (db.mode !== 'server') return needServer(view);
-  const R = { name: '', email: '', phone: '', password: '', mode: 'existing', cityId: ctx.city(), theatreId: '', tName: '', tArea: '', screens: [{ name: 'Screen 1', hall: 'multiplex', fmt: '2D' }] };
+  const R = { name: '', email: '', phone: '', password: '', mode: 'existing', cityId: ctx.city(), cityName: '', state: '', geo: null, theatreId: '', tName: '', tArea: '', screens: [{ name: 'Screen 1', hall: 'multiplex', fmt: '2D' }] };
   const steps = (n) => `<ol class="steps">${['Your details', 'Your theatre', 'Verify email', 'Plan & payment'].map((s, i) => `<li class="${i < n ? 'done' : i === n ? 'on' : ''}"><b>${i + 1}</b>${s}</li>`).join('')}</ol>`;
   const s1 = () => {
     view.innerHTML = shell(L('Register your theatre', 'உங்கள் திரையரங்கைப் பதிவு செய்'), L('Sell tickets on Lumen with your real seat layout and 3D seat views.', ''), `${steps(0)}
@@ -122,24 +122,31 @@ export function registerView(view, ctx, verifyEmail = '') {
     });
   };
   const s2 = () => {
-    const ths = theatresFor(R.cityId, { all: true });
+    if (R.cityId === '__other') R.mode = 'new';
+    const ths = R.cityId === '__other' ? [] : theatresFor(R.cityId, { all: true });
     const hallOpts = (v) => Object.keys(HALLS).map((k) => `<option value="${k}" ${k === v ? 'selected' : ''}>${esc(tx(HALLS[k]))}</option>`).join('');
     view.innerHTML = shell(L('Your theatre', 'உங்கள் திரையரங்கு'), '', `${steps(1)}
       <form id="g2" novalidate>
-      <label class="field"><span>City</span><select class="input" id="gCity">${CITIES.map((c) => `<option value="${c.id}" ${c.id === R.cityId ? 'selected' : ''}>${esc(tx(c))}</option>`).join('')}</select></label>
-      <div class="seg wide" role="group"><button type="button" data-mode="existing" aria-pressed="${R.mode === 'existing'}">Already on Lumen</button><button type="button" data-mode="new" aria-pressed="${R.mode === 'new'}">New theatre</button></div>
+      <label class="field"><span>City</span><select class="input" id="gCity">${CITIES.map((c) => `<option value="${c.id}" ${c.id === R.cityId ? 'selected' : ''}>${esc(tx(c))}</option>`).join('')}<option value="__other" ${R.cityId === '__other' ? 'selected' : ''}>My city is not in this list</option></select></label>
+      ${R.cityId === '__other' ? `<div class="af-grid">${field('gCityName', 'City / town', 'text', `value="${esc(R.cityName)}"`)}${field('gState', 'State', 'text', `value="${esc(R.state)}"`)}</div>` : ''}
+      ${R.cityId === '__other' ? '' : `<div class="seg wide" role="group"><button type="button" data-mode="existing" aria-pressed="${R.mode === 'existing'}">Already on Lumen</button><button type="button" data-mode="new" aria-pressed="${R.mode === 'new'}">New theatre</button></div>`}
       ${R.mode === 'existing' ? `<label class="field"><span>Pick your theatre</span><select class="input" id="gTh"><option value="">Choose…</option>${ths.map((t) => `<option value="${t.id}" ${t.id === R.theatreId ? 'selected' : ''}>${esc(t.name)} · ${esc(t.area)}</option>`).join('')}</select><small class="err" data-for="gTh"></small></label>
         <p class="muted small">Lumen checks that you run this theatre before giving you access.</p>`
       : `${field('gTName', 'Theatre name', 'text', `value="${esc(R.tName)}"`)}${field('gTArea', 'Area / locality', 'text', `value="${esc(R.tArea)}"`)}
         <div class="field"><span>Screens</span><div id="gScreens">${R.screens.map((s, i) => `<div class="scr-row" data-i="${i}"><input class="input" data-k="name" value="${esc(s.name)}" aria-label="Screen name"><select class="input" data-k="hall" aria-label="Hall shape">${hallOpts(s.hall)}</select><input class="input" data-k="fmt" value="${esc(s.fmt)}" aria-label="Format" placeholder="2D / IMAX / 4DX"><button type="button" class="iconbtn" data-rm="${i}" aria-label="Remove screen" ${R.screens.length < 2 ? 'disabled' : ''}>${icon('trash')}</button></div>`).join('')}</div>
-        <button type="button" class="btn ghost sm" id="gAdd" ${R.screens.length >= 8 ? 'disabled' : ''}>${icon('plus')}Add screen</button><small class="muted">You can draw the exact seat layout of each screen after approval.</small><small class="err" data-for="gScreens"></small></div>`}
+        <button type="button" class="btn ghost sm" id="gAdd" ${R.screens.length >= 8 ? 'disabled' : ''}>${icon('plus')}Add screen</button>
+        <button type="button" class="loc-btn wide" id="gGeo">${icon('locate')}<span><b>${R.geo ? 'Location saved ✓' : 'I am at the theatre: use my location'}</b><small>${R.geo ? `${R.geo.lat.toFixed(4)}, ${R.geo.lng.toFixed(4)}` : 'Helps customers find you and see the distance'}</small></span></button><small class="muted">You can draw the exact seat layout of each screen after approval.</small><small class="err" data-for="gScreens"></small></div>`}
       <p class="err" id="gErr" role="alert"></p>
       <div class="row-btns"><button type="button" class="btn ghost" id="gBack">${icon('back')}Back</button><button class="btn primary" type="submit">${icon('mail')}Create account & send code</button></div></form>`);
     const f = $('#g2');
     const readScreens = () => { R.screens = [...f.querySelectorAll('.scr-row')].map((r) => ({ name: r.querySelector('[data-k=name]').value.trim() || 'Screen', hall: r.querySelector('[data-k=hall]').value, fmt: r.querySelector('[data-k=fmt]').value.trim() || '2D' })); };
-    const keep = () => { if (R.mode === 'new') { R.tName = $('#gTName').value.trim(); R.tArea = $('#gTArea').value.trim(); readScreens(); } else R.theatreId = $('#gTh').value; };
+    const keep = () => { if (R.cityId === '__other') { R.cityName = $('#gCityName').value.trim(); R.state = $('#gState').value.trim(); } if (R.mode === 'new') { R.tName = $('#gTName').value.trim(); R.tArea = $('#gTArea').value.trim(); readScreens(); } else R.theatreId = $('#gTh').value; };
+    $('#gGeo')?.addEventListener('click', () => {
+      if (!navigator.geolocation) { toast('Location is not available on this device.'); return; }
+      navigator.geolocation.getCurrentPosition((p) => { keep(); R.geo = { lat: p.coords.latitude, lng: p.coords.longitude }; s2(); }, () => toast('Could not get your location. You can skip this.'), { timeout: 10000 });
+    });
     $('#gCity').addEventListener('change', (e) => { keep(); R.cityId = e.target.value; R.theatreId = ''; s2(); });
-    f.querySelector('.seg').addEventListener('click', (e) => { const b = e.target.closest('[data-mode]'); if (!b) return; keep(); R.mode = b.dataset.mode; s2(); });
+    f.querySelector('.seg')?.addEventListener('click', (e) => { const b = e.target.closest('[data-mode]'); if (!b) return; keep(); R.mode = b.dataset.mode; s2(); });
     $('#gAdd')?.addEventListener('click', () => { keep(); R.screens.push({ name: `Screen ${R.screens.length + 1}`, hall: 'multiplex', fmt: '2D' }); s2(); });
     f.addEventListener('click', (e) => { const b = e.target.closest('[data-rm]'); if (!b) return; keep(); R.screens.splice(+b.dataset.rm, 1); s2(); });
     $('#gBack').addEventListener('click', () => { keep(); s1(); });
@@ -148,11 +155,12 @@ export function registerView(view, ctx, verifyEmail = '') {
       let ok = true;
       if (R.mode === 'existing') ok = setErr(f, 'gTh', R.theatreId ? '' : 'Pick your theatre.');
       else {
-        ok = setErr(f, 'gTName', R.tName.length >= 3 ? '' : 'Enter the theatre name.');
+        if (R.cityId === '__other') { ok = setErr(f, 'gCityName', R.cityName.length >= 2 ? '' : 'Enter your city.') && ok; ok = setErr(f, 'gState', R.state.length >= 2 ? '' : 'Enter your state.') && ok; }
+        ok = setErr(f, 'gTName', R.tName.length >= 3 ? '' : 'Enter the theatre name.') && ok;
         ok = setErr(f, 'gTArea', R.tArea.length >= 2 ? '' : 'Enter the area.') && ok;
       }
       if (!ok) return;
-      const theatre = R.mode === 'existing' ? { mode: 'existing', theatreId: R.theatreId } : { mode: 'new', cityId: R.cityId, name: R.tName, area: R.tArea, screens: R.screens };
+      const theatre = R.mode === 'existing' ? { mode: 'existing', theatreId: R.theatreId } : { mode: 'new', ...(R.cityId === '__other' ? { cityName: R.cityName, state: R.state } : { cityId: R.cityId }), name: R.tName, area: R.tArea, screens: R.screens, lat: R.geo?.lat, lng: R.geo?.lng };
       busy(f.querySelector('[type=submit]'), async () => {
         try { const r = await db.register({ name: R.name, email: R.email, phone: R.phone, password: R.password, theatre }); s3(R.email, r.emailed); }
         catch (err) { $('#gErr').textContent = err.message; }
@@ -184,12 +192,23 @@ export function registerView(view, ctx, verifyEmail = '') {
     try { plans = await db.plans(); } catch (e) { view.innerHTML = shell('Could not load plans', esc(e.message), `<a class="btn primary wide" href="#register-pay">Try again</a>`); return; }
     let chosen = 'yearly';
     try { sessionStorage.setItem('lumen.pay', JSON.stringify({ email, payToken })); } catch (e) {}
-    view.innerHTML = shell(L('Choose your plan', 'உங்கள் திட்டத்தைத் தேர்வு செய்யுங்கள்'), L('Your email is verified. Pick a plan to list your theatre on Lumen.', ''), `${steps(3)}
+    view.innerHTML = shell(L('Start free, pay later', 'இலவசமாகத் தொடங்குங்கள்'), L('Your email is verified.', ''), `${steps(3)}
+      ${plans.trialDays ? `<div class="trial-box">${icon('spark')}<div><b>${plans.trialDays} days free</b><span>No payment now. Your trial starts when Lumen approves your theatre. Choose a plan any time before it ends.</span></div></div>
+      <button type="button" class="btn primary wide" id="g4Trial">${icon('check')}Start my ${plans.trialDays}-day free trial</button>
+      <p class="or"><span>or pay now</span></p>` : ''}
       ${planCards(plans, chosen)}<p class="err" id="g4Err" role="alert"></p>
-      <button type="button" class="btn primary wide" id="g4Pay"></button>
+      <button type="button" class="btn ${plans.trialDays ? 'ghost' : 'primary'} wide" id="g4Pay"></button>
       <p class="muted small center">You pay once now. Lumen then checks your theatre (usually within one working day) and emails you.</p>`);
     const label = () => { const pl = plans[chosen]; $('#g4Pay').innerHTML = `${icon('lock')}Pay ${rupees(pl.amount)} · ${pl.label}`; };
     bindPlanCards(view, (p) => { chosen = p; label(); }); label();
+    $('#g4Trial')?.addEventListener('click', (e) => busy(e.currentTarget, async () => {
+      try {
+        await db.startTrial(payToken);
+        try { sessionStorage.removeItem('lumen.pay'); } catch (x) {}
+        view.innerHTML = shell(L('You’re registered', 'பதிவு முடிந்தது'), '', `${steps(4)}<div class="notice ok">${icon('check')}<span><b>Free trial booked.</b> Your ${plans.trialDays} free days start when Lumen approves your theatre.</span></div>
+          <div class="notice">${icon('clock')}<span>A Lumen admin will check your theatre, usually within one working day. We will email <b>${esc(email)}</b> when it’s approved, then you can sign in.</span></div><a class="btn primary wide" href="#home">Back to Lumen</a>`);
+      } catch (err) { $('#g4Err').textContent = err.message; }
+    }));
     $('#g4Pay').addEventListener('click', (e) => busy(e.currentTarget, async () => {
       try {
         const r = await payPlan(db, chosen, payToken);
@@ -216,6 +235,10 @@ export function gate(view, ctx, role, back) {
   if (db.mode !== 'server') { needServer(view); return null; }
   const u = db.me;
   if (!u) { location.replace('#login-' + encodeURIComponent(back)); return null; }
+  if (u.role === 'customer') {
+    view.innerHTML = shell('This page is for theatres and Lumen staff', `You are signed in with your mobile number (${esc(u.phone)}). Sign out first, then sign in with a partner email.`, `<a class="btn primary wide" href="#home">Back to movies</a>`);
+    return null;
+  }
   if (role === 'admin' && u.role !== 'admin') {
     view.innerHTML = shell('This page is for Lumen admins', `You are signed in as ${esc(u.email)} (theatre partner).`, `<a class="btn primary wide" href="#partner">Open my partner panel</a>`);
     return null;

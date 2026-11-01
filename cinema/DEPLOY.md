@@ -34,6 +34,7 @@ You need: a GitHub account (you have it) and a hosting account. The steps below 
 | `SMTP_PASS` | Gmail **App password** (myaccount.google.com/apppasswords) |
 | `MAIL_FROM` | your Gmail address |
 
+| *(easier)* | Skip the SMTP and Razorpay rows here and enter them after the first sign-in in **Admin → Settings** (also WhatsApp and SMS keys). |
 | `RAZORPAY_KEY_ID` | from Razorpay Dashboard → Account & Settings → API Keys (after your KYC is approved) |
 | `RAZORPAY_KEY_SECRET` | same page; keep it secret |
 
