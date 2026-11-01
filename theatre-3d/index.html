@@ -1,3 +1,5 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Lumen 3D Seat Booking</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -231,6 +233,14 @@
     .views button .lbl { font-size: 12.5px; }
   }
   .side-ctl, .bottom-ctl, .seatview-tag { z-index: 3; }
+  .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 12px 0 16px; }
+  .min-btn { border: 1px solid var(--line); border-radius: 999px; padding: 0 12px; min-height: 34px; background: var(--surface-2); text-decoration: none; }
+  .min-btn svg.i { width: 16px; height: 16px; transform: rotate(180deg); transition: transform 0.2s; }
+  .app.panel-min .min-btn svg.i { transform: none; }
+  .app.panel-min .panel section { display: none; }
+  .app.panel-min .panel { align-self: end; }
+  .app.panel-min .panel-head { padding-bottom: 4px; }
+  @media (min-width: 761px) { .app.panel-min main { grid-template-columns: minmax(0, 1fr) 250px; } }
 
   /* 2D seat map */
   .map2d { position: absolute; inset: 0; overflow: auto; overscroll-behavior: contain; background: radial-gradient(120% 70% at 50% 0%, #1b1528 0%, #07080d 62%); padding: 74px 16px 40px; z-index: 2; }
@@ -446,6 +456,10 @@
     </div>
 
     <aside class="panel" aria-label="Booking">
+      <div class="panel-head">
+        <h2 class="eyebrow" data-t="booking">Booking</h2>
+        <button type="button" class="link min-btn" id="panelToggle" aria-expanded="true" data-icon="chev"><span data-t="minimize">Minimize</span></button>
+      </div>
       <section>
         <h2 class="eyebrow" data-t="classes">Seat classes</h2>
         <div class="class-list" id="classList"></div>
@@ -518,6 +532,7 @@ window.ICONS = {
   back: '<path d="M19 12H5M11 6l-6 6 6 6"/>',
   person: '<circle cx="12" cy="7.5" r="4" fill="currentColor" stroke="none"/><path d="M3.5 22c0-5 3.8-8.5 8.5-8.5s8.5 3.5 8.5 8.5z" fill="currentColor" stroke="none"/>',
   check: '<path d="M5 12.5l4.5 4.5L19 7"/>',
+  chev: '<path d="M6 9l6 6 6-6"/>',
 };
 window.icon = (n) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n] || ''}</svg>`;
 document.querySelectorAll('[data-icon]').forEach((el) => el.insertAdjacentHTML('afterbegin', icon(el.dataset.icon)));
@@ -550,6 +565,7 @@ window.STR = {
     b_booking: 'Booking', b_seats: 'Seats', b_snacks: 'Snacks', b_paid: 'Paid', none: 'None', done: 'Done',
     s_pop: 'Salted popcorn', s_car: 'Caramel popcorn', s_nac: 'Nachos with cheese', s_cof: 'Cold coffee', s_cmb: 'Combo: 2 popcorn + 2 drinks',
     screen_info: 'Kaalam · Sat 31 Oct · 10:40 PM · Lumen Talkies, Screen 2',
+    booking: 'Booking', minimize: 'Minimize', expand: 'Show details',
     mode_3d: '3D hall view', mode_2d: '2D seat map (easier on laptop)', help_2d: 'Tap 2D for a simple seat map', screen_way: 'Screen this way',
   },
   ta: {
@@ -579,6 +595,7 @@ window.STR = {
     b_booking: 'பதிவு எண்', b_seats: 'இருக்கைகள்', b_snacks: 'சிற்றுண்டி', b_paid: 'செலுத்தியது', none: 'இல்லை', done: 'முடிந்தது',
     s_pop: 'உப்பு பாப்கார்ன்', s_car: 'கேரமல் பாப்கார்ன்', s_nac: 'சீஸ் நாச்சோஸ்', s_cof: 'குளிர் காபி', s_cmb: 'காம்போ: 2 பாப்கார்ன் + 2 பானம்',
     screen_info: 'காலம் · சனி 31 அக் · இரவு 10:40 · லுமென் டாக்கீஸ், திரை 2',
+    booking: 'முன்பதிவு', minimize: 'சுருக்கு', expand: 'விவரம் காட்டு',
     mode_3d: '3D அரங்கப் பார்வை', mode_2d: '2D இருக்கை வரைபடம் (எளிது)', help_2d: 'எளிய இருக்கை வரைபடத்திற்கு 2D தொடுங்கள்', screen_way: 'திரை இந்தப் பக்கம்',
   },
 };
@@ -1466,6 +1483,14 @@ $('#qMinus').addEventListener('click', () => { quickN = Math.max(1, quickN - 1);
 $('#qPlus').addEventListener('click', () => { quickN = Math.min(MAX_SEATS, quickN + 1); renderPanel(); });
 $('#bestBtn').addEventListener('click', quickPick);
 $('#clearBtn').addEventListener('click', clearPicks);
+function setPanelMin(min) {
+  document.querySelector('.app').classList.toggle('panel-min', min);
+  const b = $('#panelToggle'); b.setAttribute('aria-expanded', String(!min));
+  const l = b.querySelector('[data-t]'); l.dataset.t = min ? 'expand' : 'minimize'; l.textContent = t(l.dataset.t);
+  try { localStorage.setItem('lumen-panel-min', min ? '1' : '0'); } catch (e) {}
+}
+$('#panelToggle').addEventListener('click', () => setPanelMin(!document.querySelector('.app').classList.contains('panel-min')));
+try { if (localStorage.getItem('lumen-panel-min') === '1') setPanelMin(true); } catch (e) {}
 document.querySelectorAll('.views [data-view]').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
 $('#tourBtn').addEventListener('click', () => (tour ? stopTour() : startTour()));
 $('#zoomIn').addEventListener('click', () => (mode === '2d' ? zoomMap(1.25) : zoomBy(0.65)));
