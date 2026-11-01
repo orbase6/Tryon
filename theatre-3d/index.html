@@ -72,9 +72,13 @@
   .stage canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
   .stage.dragging-file::after { content: attr(data-drop); position: absolute; inset: 10px; border: 2px dashed var(--accent); border-radius: 12px; display: grid; place-items: center; background: rgba(0,0,0,0.6); color: var(--accent); font-weight: 600; font-size: 16px; text-align: center; padding: 20px; }
 
-  .views { position: absolute; top: 10px; left: 10px; right: 64px; overflow-x: auto; scrollbar-width: none; pointer-events: none; }
-  .views::-webkit-scrollbar { display: none; }
-  .views-inner { display: inline-flex; gap: 2px; padding: 4px; background: var(--glass); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.09); border-radius: 999px; pointer-events: auto; }
+  .views { position: absolute; top: 10px; left: 10px; right: 64px; display: flex; gap: 6px; align-items: flex-start; pointer-events: none; z-index: 3; }
+  .views-inner { display: flex; flex: 0 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; gap: 2px; padding: 4px; background: var(--glass); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.09); border-radius: 999px; pointer-events: auto; }
+  .views-inner::-webkit-scrollbar { display: none; }
+  .mode { flex: none; display: inline-flex; gap: 2px; padding: 4px; background: var(--glass); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.09); border-radius: 999px; pointer-events: auto; }
+  .mode button { border: 0; background: transparent; min-height: 38px; padding: 0 12px; border-radius: 999px; font-family: var(--mono); font-weight: 600; font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+  .mode button svg.i { width: 17px; height: 17px; }
+  .mode button[aria-pressed="true"] { background: var(--pick); color: #04201d; }
   .views button { border: 0; background: transparent; min-height: 38px; padding: 0 13px; border-radius: 999px; font-size: 13px; font-weight: 600; color: var(--muted); white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
   .views button svg.i { width: 17px; height: 17px; }
   .views button:hover { color: var(--fg); }
@@ -145,7 +149,7 @@
   .chip .x:hover svg.i { color: var(--fg); }
   .empty { margin: 0; color: var(--muted); font-size: 13px; border: 1px dashed var(--line); border-radius: 12px; padding: 12px; display: flex; gap: 10px; align-items: center; }
 
-  .checkout { margin-top: auto; position: sticky; bottom: 0; padding: 14px 16px 16px; background: linear-gradient(to top, var(--surface) 78%, transparent); display: grid; grid-template-columns: 1fr auto; gap: 10px 12px; align-items: end; }
+  .checkout { margin-top: auto; position: sticky; bottom: 0; padding: 14px 16px 16px; background: var(--surface); border-top: 1px solid var(--line); display: grid; grid-template-columns: 1fr auto; gap: 10px 12px; align-items: end; }
   .checkout .lines { font-size: 13px; color: var(--muted); }
   .checkout .lines b { color: var(--fg); font-weight: 600; font-size: 14px; }
   .total { font-family: var(--display); font-weight: 700; font-size: 26px; font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
@@ -192,7 +196,17 @@
   .ticket-body dd { margin: 0; font-family: var(--mono); font-weight: 600; overflow-wrap: anywhere; }
   .ticket canvas { width: 92px; height: 92px; image-rendering: pixelated; }
 
-  @media (max-width: 900px) {
+  @media (min-width: 761px) and (max-width: 1180px) {
+    main { grid-template-columns: minmax(0, 1fr) 320px; }
+    .steps { display: none; }
+    .class-card { min-height: 54px; }
+  }
+  @media (min-width: 761px) and (max-height: 760px) {
+    .panel section { padding-top: 12px; gap: 8px; }
+    .class-card small { display: none; }
+    .class-card .price small { display: block; }
+  }
+  @media (max-width: 760px) {
     html, body { height: auto; }
     body { overflow: auto; padding-bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
     .app { height: auto; }
@@ -216,11 +230,166 @@
     .pill.icon-sm { width: var(--tap); padding: 0; justify-content: center; }
     .views button .lbl { font-size: 12.5px; }
   }
+  .side-ctl, .bottom-ctl, .seatview-tag { z-index: 3; }
+
+  /* 2D seat map */
+  .map2d { position: absolute; inset: 0; overflow: auto; overscroll-behavior: contain; background: radial-gradient(120% 70% at 50% 0%, #1b1528 0%, #07080d 62%); padding: 74px 16px 40px; z-index: 2; }
+  .map2d-inner { position: relative; margin: 0 auto; }
+  .m-screen { position: absolute; left: 50%; transform: translateX(-50%); border-top: 4px solid #ffd9a8; border-radius: 50% 50% 0 0 / 100% 100% 0 0; box-shadow: 0 -10px 28px rgba(255, 190, 120, 0.35); text-align: center; font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase; color: var(--muted); padding-top: 10px; }
+  .m-seat { position: absolute; border: 0; padding: 0; border-radius: 6px 6px 3px 3px; background: var(--cc); transform: translate(-50%, -50%) rotate(var(--rot)); display: grid; place-items: center; color: rgba(0,0,0,0.6); transition: transform 0.12s, background 0.12s, opacity 0.12s; box-shadow: inset 0 -3px 0 rgba(0,0,0,0.25); }
+  .m-seat:hover { transform: translate(-50%, -50%) rotate(var(--rot)) scale(1.3); z-index: 2; }
+  .m-seat.is-booked { background: #2b2f3b; color: #8088a3; cursor: not-allowed; box-shadow: none; }
+  .m-seat.is-picked { background: var(--pick); color: #04201d; box-shadow: 0 0 0 2px rgba(95,246,232,0.35), 0 0 14px rgba(95,246,232,0.6); }
+  .m-seat.dim { opacity: 0.22; }
+  .m-seat svg.i { width: 74%; height: 74%; stroke-width: 3; }
+  .m-row { position: absolute; font-family: var(--mono); color: var(--muted); transform: translate(-50%, -50%); pointer-events: none; }
+  .m-label { position: absolute; left: 50%; transform: translate(-50%, -50%); font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--c-balcony); white-space: nowrap; display: flex; align-items: center; gap: 10px; }
+  .m-label::before, .m-label::after { content: ""; width: 48px; height: 1px; background: currentColor; opacity: 0.5; }
+  .stage.is-2d canvas, .stage.is-2d .views-inner, .stage.is-2d .bottom-ctl, .stage.is-2d .seatview-tag { display: none !important; }
+
+  /* Popcorn intro */
+  .loader { position: fixed; inset: 0; z-index: 100; background: var(--bg); }
+  .loader canvas { display: block; width: 100%; height: 100%; }
+
   :root[lang="ta"] .eyebrow, :root[lang="ta"] .cta, :root[lang="ta"] .film h1 span { letter-spacing: 0; text-transform: none; }
   :root[lang="ta"] .eyebrow { font-family: var(--body); font-size: 12.5px; font-weight: 600; }
   :root[lang="ta"] .cta { font-family: var(--body); font-size: 15px; font-weight: 700; }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
+
+<div class="loader" id="loader" aria-hidden="true"><canvas id="loaderCanvas"></canvas></div>
+<script>
+/* Popcorn intro: kernels burst out of the box, pile up to fill the screen, then the pile bursts open to reveal the hall (~3.5s). */
+(function () {
+  const wrap = document.getElementById('loader');
+  const cv = document.getElementById('loaderCanvas');
+  const g = cv.getContext('2d');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function kernel(seed) {
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const k = c.getContext('2d'); let r = seed;
+    const rnd = () => (r = (r * 16807) % 2147483647) / 2147483647;
+    const n = 5 + Math.floor(rnd() * 3);
+    for (let i = 0; i < n; i++) {
+      const a = rnd() * 6.283, d = rnd() * 11, x = 32 + Math.cos(a) * d, y = 32 + Math.sin(a) * d, rr = 9 + rnd() * 7;
+      const gr = k.createRadialGradient(x - 3, y - 4, 1, x, y, rr);
+      gr.addColorStop(0, '#fffdf3'); gr.addColorStop(0.62, '#f9e9c2'); gr.addColorStop(1, '#e2bf7e');
+      k.fillStyle = gr; k.beginPath(); k.arc(x, y, rr, 0, 6.283); k.fill();
+    }
+    k.fillStyle = 'rgba(238,165,35,0.5)';
+    for (let i = 0; i < 3; i++) { k.beginPath(); k.arc(20 + rnd() * 24, 20 + rnd() * 24, 2 + rnd() * 3, 0, 6.283); k.fill(); }
+    k.fillStyle = '#a86b25'; k.beginPath(); k.ellipse(28 + rnd() * 8, 45, 4, 2.4, rnd() * 3, 0, 6.283); k.fill();
+    return c;
+  }
+  const sprites = Array.from({ length: 8 }, (_, i) => kernel(i * 977 + 13));
+  let W = 0, H = 0, pile = null;
+  function size() {
+    const d = Math.min(devicePixelRatio || 1, 2);
+    W = innerWidth; H = innerHeight;
+    cv.width = Math.round(W * d); cv.height = Math.round(H * d);
+    g.setTransform(d, 0, 0, d, 0, 0);
+    pile = document.createElement('canvas'); pile.width = Math.ceil(W); pile.height = Math.ceil(H) + 120;
+    const p = pile.getContext('2d'); let r = 7;
+    const rnd = () => (r = (r * 16807) % 2147483647) / 2147483647;
+    p.fillStyle = '#ecd29a'; p.fillRect(0, 0, pile.width, pile.height);
+    for (let y = -20; y < pile.height + 20; y += 22) for (let x = -20; x < pile.width + 20; x += 28) {
+      const s = 36 + rnd() * 22;
+      p.save(); p.translate(x + rnd() * 14, y + rnd() * 10); p.rotate(rnd() * 6.283);
+      p.drawImage(sprites[(rnd() * 8) | 0], -s / 2, -s / 2, s, s); p.restore();
+    }
+  }
+  size(); addEventListener('resize', size);
+  const ease = (k) => 1 - Math.pow(1 - k, 3);
+  const FILL = 2.35, HOLD = 2.7, REVEAL = 0.8, MAXWAIT = 8;
+  const parts = [], burst = [];
+  let start = performance.now(), last = start, acc = 0, revealAt = null, firstDraw = true;
+  function box(t) {
+    const bw = Math.min(Math.max(W * 0.17, 110), 180), bh = bw * 1.1;
+    const shake = t < FILL ? Math.sin(t * 52) * 2.4 * Math.min(t * 1.5, 1) : 0;
+    const bot = H * 0.9, top = bot - bh, cx = W / 2 + shake, tw = bw / 2, bwid = bw * 0.36;
+    for (let i = 0; i < 10; i++) {
+      const s = bw * 0.3, x = cx - tw * 0.82 + (i / 9) * tw * 1.64, y = top - 6 - Math.sin((i / 9) * Math.PI) * bw * 0.2;
+      g.drawImage(sprites[i % 8], x - s / 2, y - s / 2, s, s);
+    }
+    g.save(); g.beginPath(); g.moveTo(cx - tw, top); g.lineTo(cx + tw, top); g.lineTo(cx + bwid, bot); g.lineTo(cx - bwid, bot); g.closePath(); g.clip();
+    for (let i = 0; i < 7; i++) { g.fillStyle = i % 2 ? '#f7f1e3' : '#d7262e'; g.fillRect(cx - tw + (i * bw) / 7, top, bw / 7 + 1, bh); }
+    const sh = g.createLinearGradient(cx - tw, 0, cx + tw, 0);
+    sh.addColorStop(0, 'rgba(0,0,0,0.3)'); sh.addColorStop(0.5, 'rgba(255,255,255,0.08)'); sh.addColorStop(1, 'rgba(0,0,0,0.35)');
+    g.fillStyle = sh; g.fillRect(cx - tw, top, bw, bh); g.restore();
+    g.fillStyle = '#a3141b'; g.fillRect(cx - tw - 4, top - 5, bw + 8, 9);
+    const by = top + bh * 0.55;
+    g.fillStyle = '#ffc53d'; g.beginPath(); g.arc(cx, by, bw * 0.2, 0, 6.283); g.fill();
+    g.fillStyle = '#7a1016'; g.font = `800 ${Math.round(bw * 0.13)}px Figtree, Arial, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('POP', cx, by + 1);
+    return { cx, top, bw };
+  }
+  function drawKernel(p) { g.save(); g.translate(p.x, p.y); g.rotate(p.r); g.drawImage(sprites[p.k], -p.s / 2, -p.s / 2, p.s, p.s); g.restore(); }
+  function frame(now) {
+    const dt = Math.min((now - last) / 1000, 0.05); last = now;
+    const t = (now - start) / 1000;
+    if (firstDraw) { firstDraw = false; wrap.style.background = 'transparent'; }
+    g.globalCompositeOperation = 'source-over';
+    g.fillStyle = '#07080d'; g.fillRect(0, 0, W, H);
+    const sp = g.createRadialGradient(W / 2, H * 0.75, 10, W / 2, H * 0.75, Math.max(W, H) * 0.7);
+    sp.addColorStop(0, 'rgba(255,190,110,0.2)'); sp.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = sp; g.fillRect(0, 0, W, H);
+    const b = box(t);
+    if (t < HOLD) {
+      acc += 36 * Math.exp(t * 1.55) * dt;
+      while (acc > 1 && parts.length < 700) {
+        acc--;
+        parts.push({ x: b.cx + (Math.random() - 0.5) * b.bw * 0.7, y: b.top, vx: (Math.random() - 0.5) * W * 0.95, vy: -H * (0.95 + Math.random() * 0.75), r: Math.random() * 6.28, vr: (Math.random() - 0.5) * 12, s: (16 + Math.random() * 20) * (1 + Math.min(t / FILL, 1)), k: (Math.random() * 8) | 0 });
+      }
+    }
+    const pk = Math.min(Math.max((t - 0.9) / (FILL - 0.9), 0), 1);
+    if (pk > 0) {
+      const top = H + 30 - (H + 150) * ease(pk);
+      g.save(); g.beginPath(); g.moveTo(0, H);
+      for (let x = 0; x <= W + 20; x += 18) g.lineTo(x, top + Math.sin(x * 0.03 + t * 4) * 12 + Math.sin(x * 0.011 + 1) * 24);
+      g.lineTo(W, H); g.closePath(); g.clip();
+      g.drawImage(pile, 0, -60, W, H + 120); g.restore();
+    }
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const p = parts[i];
+      p.vy += H * 1.5 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.r += p.vr * dt;
+      if (p.y > H + 60) { parts.splice(i, 1); continue; }
+      drawKernel(p);
+    }
+    const bk = Math.min(Math.max((t - FILL + 0.35) / 0.4, 0), 1);
+    if (bk > 0) {
+      g.globalAlpha = bk; g.fillStyle = '#7a1016'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.font = `700 ${Math.round(Math.min(W * 0.09, 72))}px Unbounded, "Arial Black", sans-serif`;
+      g.fillText('KAALAM', W / 2, H / 2 - 12);
+      g.font = `700 ${Math.round(Math.min(W * 0.034, 16))}px Figtree, Arial, sans-serif`;
+      g.fillText('LUMEN TALKIES  ·  NOW SHOWING', W / 2, H / 2 + 38);
+      g.globalAlpha = 1;
+    }
+    const ready = window.__sceneReady || t > MAXWAIT;
+    if (revealAt === null && t >= HOLD && ready) {
+      revealAt = t; window.__loaderCovering = false;
+      for (let i = 0; i < 140; i++) { const a = Math.random() * 6.283, v = (0.6 + Math.random()) * Math.max(W, H) * 0.9; burst.push({ x: W / 2 + Math.cos(a) * 30, y: H / 2 + Math.sin(a) * 30, vx: Math.cos(a) * v, vy: Math.sin(a) * v, r: Math.random() * 6.28, vr: (Math.random() - 0.5) * 14, s: 30 + Math.random() * 30, k: (Math.random() * 8) | 0 }); }
+    }
+    if (revealAt !== null) {
+      const k = Math.min((t - revealAt) / REVEAL, 1);
+      const R = ease(k) * Math.hypot(W, H) * 0.6;
+      g.globalCompositeOperation = 'destination-out';
+      const rg = g.createRadialGradient(W / 2, H / 2, Math.max(R - 50, 0), W / 2, H / 2, R + 1);
+      rg.addColorStop(0, 'rgba(0,0,0,1)'); rg.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = rg; g.beginPath(); g.arc(W / 2, H / 2, R + 1, 0, 6.283); g.fill();
+      g.globalCompositeOperation = 'source-over';
+      burst.forEach((p) => { p.x += p.vx * dt; p.y += p.vy * dt; p.r += p.vr * dt; p.vy += H * 0.8 * dt; drawKernel(p); });
+      if (k >= 1) { wrap.remove(); return; }
+    }
+    requestAnimationFrame(frame);
+  }
+  if (reduce) {
+    setTimeout(() => { wrap.style.transition = 'opacity .3s'; wrap.style.opacity = '0'; setTimeout(() => wrap.remove(), 350); }, 500);
+  } else {
+    window.__loaderCovering = true;
+    requestAnimationFrame((n) => { start = last = n; frame(n); });
+  }
+})();
+</script>
 
 <div class="app">
   <header class="top">
@@ -241,7 +410,13 @@
   <main>
     <div class="stage" id="stage" data-drop="Drop a video to play it on the screen">
       <div class="loading" id="loading">Setting up the auditorium…</div>
-      <div class="views"><div class="views-inner" role="group" aria-label="Camera views">
+      <div class="map2d" id="map2d" hidden><div class="map2d-inner" id="map2dInner"></div></div>
+      <div class="views">
+        <div class="mode" role="group" aria-label="3D or 2D">
+          <button type="button" data-mode="3d" aria-pressed="true" data-icon="cube" data-ta="mode_3d">3D</button>
+          <button type="button" data-mode="2d" aria-pressed="false" data-icon="grid" data-ta="mode_2d">2D</button>
+        </div>
+        <div class="views-inner" role="group" aria-label="Camera views">
         <button type="button" data-view="overview" aria-pressed="true" data-icon="cube"><span class="lbl" data-t="v_overview">Overview</span></button>
         <button type="button" data-view="stage" aria-pressed="false" data-icon="screen"><span class="lbl" data-t="v_stage">Near screen</span></button>
         <button type="button" data-view="balcony" aria-pressed="false" data-icon="stairs"><span class="lbl" data-t="v_balcony">Balcony</span></button>
@@ -341,6 +516,8 @@ window.ICONS = {
   zoom: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-5-5M11 8v6M8 11h6"/>',
   arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
   back: '<path d="M19 12H5M11 6l-6 6 6 6"/>',
+  person: '<circle cx="12" cy="7.5" r="4" fill="currentColor" stroke="none"/><path d="M3.5 22c0-5 3.8-8.5 8.5-8.5s8.5 3.5 8.5 8.5z" fill="currentColor" stroke="none"/>',
+  check: '<path d="M5 12.5l4.5 4.5L19 7"/>',
 };
 window.icon = (n) => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n] || ''}</svg>`;
 document.querySelectorAll('[data-icon]').forEach((el) => el.insertAdjacentHTML('afterbegin', icon(el.dataset.icon)));
@@ -373,6 +550,7 @@ window.STR = {
     b_booking: 'Booking', b_seats: 'Seats', b_snacks: 'Snacks', b_paid: 'Paid', none: 'None', done: 'Done',
     s_pop: 'Salted popcorn', s_car: 'Caramel popcorn', s_nac: 'Nachos with cheese', s_cof: 'Cold coffee', s_cmb: 'Combo: 2 popcorn + 2 drinks',
     screen_info: 'Kaalam · Sat 31 Oct · 10:40 PM · Lumen Talkies, Screen 2',
+    mode_3d: '3D hall view', mode_2d: '2D seat map (easier on laptop)', help_2d: 'Tap 2D for a simple seat map', screen_way: 'Screen this way',
   },
   ta: {
     title_sub: 'கடைசி மழைக்காலம்', meta: 'லுமென் டாக்கீஸ், அண்ணா நகர் · சனி 31 அக் · இரவு 10:40 · டால்பி அட்மாஸ் · தமிழ்',
@@ -401,6 +579,7 @@ window.STR = {
     b_booking: 'பதிவு எண்', b_seats: 'இருக்கைகள்', b_snacks: 'சிற்றுண்டி', b_paid: 'செலுத்தியது', none: 'இல்லை', done: 'முடிந்தது',
     s_pop: 'உப்பு பாப்கார்ன்', s_car: 'கேரமல் பாப்கார்ன்', s_nac: 'சீஸ் நாச்சோஸ்', s_cof: 'குளிர் காபி', s_cmb: 'காம்போ: 2 பாப்கார்ன் + 2 பானம்',
     screen_info: 'காலம் · சனி 31 அக் · இரவு 10:40 · லுமென் டாக்கீஸ், திரை 2',
+    mode_3d: '3D அரங்கப் பார்வை', mode_2d: '2D இருக்கை வரைபடம் (எளிது)', help_2d: 'எளிய இருக்கை வரைபடத்திற்கு 2D தொடுங்கள்', screen_way: 'திரை இந்தப் பக்கம்',
   },
 };
 window.lang = 'en';
@@ -514,6 +693,9 @@ let quickN = 2;
 let hovered = null;
 let houseOn = true, houseLevel = 1;
 let hd = true;
+let mode = '3d';
+const seatEls = new Map();
+let mapBuilt = false;
 
 /* ---------------- Three setup ---------------- */
 const stage = $('#stage');
@@ -522,6 +704,7 @@ try {
   renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
 } catch (e) {
   $('#loading').textContent = 'This device could not start 3D graphics (WebGL). Try a recent Chrome, Edge, Safari or Firefox.';
+  window.__sceneReady = true;
   throw e;
 }
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -868,9 +1051,163 @@ function seatColor(s, out) {
   if (s === hovered && !s.selected) out.lerp(C.white, s.booked ? 0.12 : 0.45);
   return out;
 }
-function paint(s) { s.mesh.setColorAt(s.idx, seatColor(s, tmpC)); s.mesh.instanceColor.needsUpdate = true; }
-function paintAll() { seats.forEach((s) => s.mesh.setColorAt(s.idx, seatColor(s, tmpC))); stdMesh.instanceColor.needsUpdate = true; recMesh.instanceColor.needsUpdate = true; }
+function paint(s) { s.mesh.setColorAt(s.idx, seatColor(s, tmpC)); s.mesh.instanceColor.needsUpdate = true; paint2d(s); }
+function paintAll() { seats.forEach((s) => { s.mesh.setColorAt(s.idx, seatColor(s, tmpC)); paint2d(s); }); stdMesh.instanceColor.needsUpdate = true; recMesh.instanceColor.needsUpdate = true; }
 paintAll();
+
+/* ---------------- Audience: a person in every booked seat ---------------- */
+const peopleGroup = new THREE.Group();
+scene.add(peopleGroup);
+const UP = new THREE.Vector3(0, 1, 0);
+function limb(a, b, r) {
+  const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), d = B.clone().sub(A), len = d.length();
+  const g = new THREE.CapsuleGeometry(r, Math.max(len, 0.001), 3, 8);
+  g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(UP, d.normalize()));
+  g.translate((A.x + B.x) / 2, (A.y + B.y) / 2, (A.z + B.z) / 2);
+  return g;
+}
+function ball(r, x, y, z, sx = 1, sy = 1, sz = 1, seg = 10) {
+  const g = new THREE.SphereGeometry(r, seg, Math.round(seg * 0.75)); g.scale(sx, sy, sz); g.translate(x, y, z); return g;
+}
+const both = (f) => [f(-1), f(1)];
+const merge = (list) => mergeGeometries(list.map((g) => (g.index ? g.toNonIndexed() : g)));
+function hairCap() {
+  const g = new THREE.SphereGeometry(0.108, 14, 7, 0, Math.PI * 2, 0, Math.PI * 0.52);
+  g.scale(0.94, 1.08, 1.04); g.rotateX(0.55); g.translate(0, 0.13, 0.008); return g;
+}
+function colored(geo, hex) {
+  geo = geo.index ? geo.toNonIndexed() : geo; geo.deleteAttribute('uv');
+  const c = new THREE.Color(hex), n = geo.attributes.position.count, a = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; }
+  geo.setAttribute('color', new THREE.BufferAttribute(a, 3)); return geo;
+}
+// Seat-local body (seat faces -z, floor at y = 0). Head parts are local to the neck pivot.
+const PGEO = {
+  shirt: merge([
+    (() => { const g = limb([0, 0.64, 0.08], [0, 0.97, 0.15], 0.15); g.scale(1.22, 1, 0.8); return g; })(),
+    ...both((s) => ball(0.068, s * 0.165, 0.98, 0.12)),
+    ...both((s) => limb([s * 0.185, 0.96, 0.12], [s * 0.235, 0.73, 0.05], 0.05)),
+  ]),
+  skin: merge([
+    limb([0, 1.0, 0.12], [0, 1.1, 0.11], 0.043),
+    ...both((s) => limb([s * 0.235, 0.73, 0.05], [s * 0.17, 0.67, -0.19], 0.04)),
+    ...both((s) => ball(0.042, s * 0.15, 0.66, -0.23, 0.9, 0.65, 1.35)),
+  ]),
+  pants: merge([
+    ball(0.16, 0, 0.6, 0.04, 1.15, 0.55, 1),
+    ...both((s) => limb([s * 0.085, 0.57, 0.02], [s * 0.1, 0.57, -0.32], 0.072)),
+    ...both((s) => limb([s * 0.1, 0.55, -0.33], [s * 0.1, 0.11, -0.38], 0.054)),
+  ]),
+  shoes: merge(both((s) => ball(0.05, s * 0.1, 0.045, -0.43, 1, 0.6, 1.9))),
+  head: merge([
+    ball(0.1, 0, 0.13, 0, 0.9, 1.13, 1.0, 16),
+    ...both((s) => ball(0.024, s * 0.093, 0.125, 0.012, 0.45, 1, 0.8)),
+    ball(0.02, 0, 0.115, -0.098, 0.75, 1.1, 1.2),
+  ]),
+  hairShort: hairCap(),
+  hairLong: merge([hairCap(), (() => { const g = limb([0, 0.14, 0.07], [0, -0.13, 0.1], 0.075); g.scale(1.35, 1, 0.75); return g; })()]),
+  hairBun: merge([hairCap(), ball(0.05, 0, 0.12, 0.125)]),
+  flowers: merge(Array.from({ length: 9 }, (_, i) => { const a = -1.2 + (i / 8) * 2.4; return ball(0.013, Math.sin(a) * 0.062, 0.12 + Math.cos(a) * 0.062, 0.135, 1, 1, 1, 6); })),
+  mustache: (() => { const g = new THREE.BoxGeometry(0.066, 0.014, 0.02); g.translate(0, 0.074, -0.094); return g; })(),
+  pallu: merge([limb([-0.16, 0.99, -0.02], [0.13, 0.66, -0.08], 0.032), limb([-0.16, 0.99, -0.02], [-0.17, 0.82, 0.2], 0.03)]),
+  popcorn: mergeGeometries([
+    colored((() => { const g = new THREE.CylinderGeometry(0.072, 0.056, 0.13, 14); g.translate(0, 0.74, -0.2); return g; })(), '#c8202a'),
+    colored(ball(0.068, 0, 0.81, -0.2, 1, 0.55, 1, 10), '#f6e2b0'),
+  ]),
+};
+const PMAT = {
+  cloth: new THREE.MeshStandardMaterial({ roughness: 0.9 }),
+  skin: new THREE.MeshStandardMaterial({ roughness: 0.6 }),
+  hair: new THREE.MeshStandardMaterial({ roughness: 0.42, side: THREE.DoubleSide }),
+  shoe: new THREE.MeshStandardMaterial({ roughness: 0.55 }),
+  flower: new THREE.MeshStandardMaterial({ color: '#fbfbf1', roughness: 0.5, emissive: '#1d1d16' }),
+  tub: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6 }),
+};
+const PAL = {
+  skin: ['#5c3a24', '#6e4429', '#7d4f2e', '#8a5a35', '#9a6a40', '#a8784c', '#b5865a', '#c49468'],
+  hair: ['#0f0c0b', '#16110e', '#1d1714', '#241c17'],
+  grey: ['#8c8782', '#a9a49e', '#6f6a66', '#c9c5bf'],
+  menTop: ['#f1ede4', '#dfe6ee', '#9fb6cf', '#2c3b57', '#6d2730', '#56653a', '#c79c3c', '#3b3b3e', '#a65735', '#2f6a66', '#d7cdb8', '#47506b'],
+  womenTop: ['#a3123a', '#d39a10', '#1f6b4a', '#5a2378', '#c4502a', '#16507a', '#e3779a', '#7a1f2b', '#2e7d6b', '#e0c27a'],
+  pallu: ['#e2b23a', '#f0d27a', '#c0392b', '#2f8f5b', '#ffd7a8', '#8e44ad'],
+  menBottom: ['#1d2230', '#2b3550', '#3d3a36', '#4e5562', '#6b5a44', '#1f1f22'],
+  legging: ['#efe6d2', '#d9c9a8', '#24222c', '#3a2b4a'],
+  shoes: ['#141414', '#3b2a1e', '#5a4330', '#8a6d4f'],
+};
+const idSeed = (id) => [...id].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 17);
+function planPerson(s) {
+  const r = mulberry32(idSeed(s.id));
+  const pick = (arr) => new THREE.Color(arr[Math.floor(r() * arr.length)]);
+  const kid = r() < 0.08, female = r() < 0.46, elder = !kid && r() < 0.16;
+  const p = { s, kid, female, elder, skin: pick(PAL.skin), hair: pick(elder ? PAL.grey : PAL.hair), shoes: pick(PAL.shoes) };
+  if (female) {
+    p.top = pick(PAL.womenTop);
+    p.saree = !kid && r() < 0.6;
+    p.bottom = p.saree ? p.top.clone().multiplyScalar(0.82) : pick(PAL.legging);
+    p.hairType = kid || r() < 0.55 ? 'hairLong' : 'hairBun';
+    p.flowers = r() < (p.hairType === 'hairBun' ? 0.7 : 0.3);
+    p.pallu = p.saree ? pick(PAL.pallu) : null;
+  } else {
+    p.top = pick(PAL.menTop);
+    p.bottom = elder && r() < 0.5 ? new THREE.Color('#ece6d6') : pick(PAL.menBottom);   // veshti for some elders
+    p.hairType = 'hairShort';
+    p.mustache = !kid && r() < 0.65;
+  }
+  p.popcorn = r() < 0.22;
+  p.scale = kid ? 0.72 : 0.95 + r() * 0.1;
+  p.wide = kid ? 1 : 0.93 + r() * 0.17;
+  p.lean = (elder ? -0.05 : 0) + (r() - 0.5) * 0.08;
+  p.yaw = (r() - 0.5) * 0.12;
+  p.dx = (r() - 0.5) * 0.05;
+  const chatting = r() < 0.1;
+  p.hYaw = chatting ? (r() < 0.5 ? -1 : 1) * (0.5 + r() * 0.3) : (r() - 0.5) * 0.35;
+  p.hPitch = (r() - 0.4) * 0.22;
+  p.hRoll = (r() - 0.5) * 0.14;
+  return p;
+}
+function buildPeople() {
+  for (const c of [...peopleGroup.children]) { peopleGroup.remove(c); c.dispose(); }
+  const ppl = seats.filter((s) => s.booked).map(planPerson);
+  const parts = [];
+  const mk = (geo, mat, n) => {
+    const m = new THREE.InstancedMesh(geo, mat, Math.max(n, 1));
+    m.count = n; m.frustumCulled = false; peopleGroup.add(m);
+    const api = { m, i: 0, add(mat4, col) { m.setMatrixAt(this.i, mat4); if (col) m.setColorAt(this.i, col); this.i++; } };
+    parts.push(api); return api;
+  };
+  const N = ppl.length, count = (f) => ppl.filter(f).length;
+  const P = {
+    shirt: mk(PGEO.shirt, PMAT.cloth, N), skin: mk(PGEO.skin, PMAT.skin, N), pants: mk(PGEO.pants, PMAT.cloth, N),
+    shoes: mk(PGEO.shoes, PMAT.shoe, N), head: mk(PGEO.head, PMAT.skin, N),
+    hairShort: mk(PGEO.hairShort, PMAT.hair, count((p) => p.hairType === 'hairShort')),
+    hairLong: mk(PGEO.hairLong, PMAT.hair, count((p) => p.hairType === 'hairLong')),
+    hairBun: mk(PGEO.hairBun, PMAT.hair, count((p) => p.hairType === 'hairBun')),
+    flowers: mk(PGEO.flowers, PMAT.flower, count((p) => p.flowers)),
+    mustache: mk(PGEO.mustache, PMAT.hair, count((p) => p.mustache)),
+    pallu: mk(PGEO.pallu, PMAT.cloth, count((p) => p.pallu)),
+    popcorn: mk(PGEO.popcorn, PMAT.tub, count((p) => p.popcorn)),
+  };
+  const seatM = new THREE.Matrix4(), bodyM = new THREE.Matrix4(), headM = new THREE.Matrix4();
+  const q = new THREE.Quaternion(), e = new THREE.Euler(), v = new THREE.Vector3(), sc = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1);
+  for (const p of ppl) {
+    const rec = p.s.kind === 'rec';
+    seatM.compose(p.s.pos, q.setFromAxisAngle(UP, p.s.theta), one);
+    e.set(p.lean + (rec ? 0.16 : 0), p.yaw, 0, 'YXZ');
+    bodyM.compose(v.set(p.dx, (rec ? 0.08 : 0) + (p.kid ? 0.14 : 0), rec ? 0.06 : 0), q.setFromEuler(e), sc.set(p.scale * p.wide, p.scale, p.scale)).premultiply(seatM);
+    e.set(p.hPitch, p.hYaw, p.hRoll, 'YXZ');
+    const hs = p.kid ? 1.15 : 1;
+    headM.compose(v.set(0, 1.1, 0.11), q.setFromEuler(e), sc.set(hs / p.wide, hs, hs)).premultiply(bodyM);
+    P.shirt.add(bodyM, p.top); P.skin.add(bodyM, p.skin); P.pants.add(bodyM, p.bottom); P.shoes.add(bodyM, p.shoes);
+    P.head.add(headM, p.skin); P[p.hairType].add(headM, p.hair);
+    if (p.flowers) P.flowers.add(headM);
+    if (p.mustache) P.mustache.add(headM, p.hair);
+    if (p.pallu) P.pallu.add(bodyM, p.pallu);
+    if (p.popcorn) P.popcorn.add(bodyM);
+  }
+  parts.forEach(({ m }) => { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; });
+}
+buildPeople();
+window.__lumen = { renderer, peopleGroup };
 
 /* ---------------- Camera: always inside the hall ---------------- */
 const ROOM = { xPad: 0.5, zMin: -13.1, zMax: BACK_WALL_Z - 0.45, yMax: H - 0.45 };
@@ -1123,7 +1460,7 @@ $('#chips').addEventListener('click', (e) => {
   const rm = e.target.closest('[data-remove]');
   if (rm) { toggleSeat(seatById.get(rm.dataset.remove)); return; }
   const v = e.target.closest('[data-view-seat]');
-  if (v) { seatView(seatById.get(v.dataset.viewSeat)); if (matchMedia('(max-width: 900px)').matches) stage.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' }); }
+  if (v) { if (mode === '2d') setMode('3d'); seatView(seatById.get(v.dataset.viewSeat)); if (matchMedia('(max-width: 900px)').matches) stage.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' }); }
 });
 $('#qMinus').addEventListener('click', () => { quickN = Math.max(1, quickN - 1); renderPanel(); });
 $('#qPlus').addEventListener('click', () => { quickN = Math.min(MAX_SEATS, quickN + 1); renderPanel(); });
@@ -1131,15 +1468,15 @@ $('#bestBtn').addEventListener('click', quickPick);
 $('#clearBtn').addEventListener('click', clearPicks);
 document.querySelectorAll('.views [data-view]').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
 $('#tourBtn').addEventListener('click', () => (tour ? stopTour() : startTour()));
-$('#zoomIn').addEventListener('click', () => zoomBy(0.65));
-$('#zoomOut').addEventListener('click', () => zoomBy(1.5));
-$('#resetBtn').addEventListener('click', () => setView('overview'));
+$('#zoomIn').addEventListener('click', () => (mode === '2d' ? zoomMap(1.25) : zoomBy(0.65)));
+$('#zoomOut').addEventListener('click', () => (mode === '2d' ? zoomMap(0.8) : zoomBy(1.5)));
+$('#resetBtn').addEventListener('click', () => { if (mode === '2d') { zoomMap(0); centerMap(); map2d.scrollTop = 0; } else setView('overview'); });
 $('#lightsBtn').addEventListener('click', (e) => { houseOn = !houseOn; e.currentTarget.setAttribute('aria-pressed', String(houseOn)); });
 $('#hdBtn').addEventListener('click', (e) => { hd = !hd; e.currentTarget.setAttribute('aria-pressed', String(hd)); resize(); });
 $('#langBtn').addEventListener('click', () => {
   window.lang = window.lang === 'ta' ? 'en' : 'ta';
   try { localStorage.setItem('lumen-lang', window.lang); } catch (e) {}
-  window.applyStatic(); renderPanel(); setVideoUi();
+  window.applyStatic(); renderPanel(); setVideoUi(); paintAll(); layoutMap();
   if (!$('#seatTag').hidden) $('#seatTag').hidden = true;
   if (!modal.hidden && modal.dataset.view) VIEWS_MODAL[modal.dataset.view]();
 });
@@ -1149,6 +1486,87 @@ function toast(msg) {
   const el = $('#toast'); el.textContent = msg; el.hidden = false;
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; }, 3000);
 }
+
+/* ---------------- 2D seat map (same seats, flat and easy to click) ---------------- */
+const map2d = $('#map2d'), mapInner = $('#map2dInner');
+let mapZoom = 1;
+const MAP_Z0 = -11.6, MAP_Z1 = 14.3, MAP_PAD = 0.9;
+function buildMap() {
+  mapInner.innerHTML = `<div class="m-screen" id="mScreen"><span data-t="screen_way">${t('screen_way')}</span></div><div class="m-label" id="mBalc"></div>`;
+  for (const r of rows) for (const side of [-1, 1]) {
+    const el = document.createElement('span'); el.className = 'm-row'; el.textContent = r.letter;
+    const th = (side * (r.half + (r.pair ? 1.0 : 0.7))) / r.R;
+    el.dataset.x = r.R * Math.sin(th); el.dataset.z = CZ + r.R * Math.cos(th);
+    mapInner.appendChild(el);
+  }
+  for (const s of seats) {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'm-seat'; b.dataset.id = s.id;
+    seatEls.set(s, b); mapInner.appendChild(b);
+  }
+  mapBuilt = true;
+  seats.forEach(paint2d);
+}
+function layoutMap() {
+  if (!mapBuilt || !map2d.clientWidth) return;
+  const minPx = matchMedia('(pointer: coarse)').matches ? 30 : 24;
+  const fit = (map2d.clientWidth - 32) / (2 * (W + MAP_PAD));
+  const k = clamp(fit, minPx, 64) * mapZoom;
+  const X = (x) => (x + W + MAP_PAD) * k, Y = (z) => (z - MAP_Z0) * k;
+  mapInner.style.width = 2 * (W + MAP_PAD) * k + 'px';
+  mapInner.style.height = (MAP_Z1 - MAP_Z0) * k + 'px';
+  const sc = $('#mScreen'); sc.style.width = SCREEN_W * k + 'px'; sc.style.top = '0px'; sc.style.height = k + 'px';
+  const bl = $('#mBalc'); bl.textContent = cname('balcony'); bl.style.top = Y(8.3) + 'px';
+  mapInner.querySelectorAll('.m-row').forEach((el) => { el.style.left = X(+el.dataset.x) + 'px'; el.style.top = Y(+el.dataset.z) + 'px'; el.style.fontSize = Math.max(10, k * 0.36) + 'px'; });
+  for (const [s, b] of seatEls) {
+    const rec = s.kind === 'rec';
+    b.style.left = X(s.pos.x) + 'px'; b.style.top = Y(s.pos.z) + 'px';
+    b.style.width = (rec ? 0.92 : 0.58) * k + 'px'; b.style.height = (rec ? 0.8 : 0.52) * k + 'px';
+    b.style.setProperty('--rot', -s.theta + 'rad');
+  }
+}
+function paint2d(s) {
+  if (!mapBuilt) return;
+  const b = seatEls.get(s); if (!b) return;
+  const c = CLASSES[s.cls];
+  b.style.setProperty('--cc', c.color);
+  b.className = 'm-seat' + (s.booked ? ' is-booked' : s.selected ? ' is-picked' : '') + (activeClass && s.cls !== activeClass && !s.selected ? ' dim' : '');
+  b.innerHTML = s.booked ? icon('person') : s.selected ? icon('check') : '';
+  b.setAttribute('aria-pressed', String(!!s.selected));
+  b.setAttribute('aria-label', `${t('row_seat', { r: s.row, n: s.num })}, ${s.booked ? t('tip_booked') : s.selected ? t('leg_pick') : `${cname(s.cls)} ${inr(c.price)}`}`);
+}
+function centerMap() { map2d.scrollLeft = (map2d.scrollWidth - map2d.clientWidth) / 2; }
+function zoomMap(f) {
+  const cx = (map2d.scrollLeft + map2d.clientWidth / 2) / map2d.scrollWidth, cy = (map2d.scrollTop + map2d.clientHeight / 2) / map2d.scrollHeight;
+  mapZoom = f ? clamp(mapZoom * f, 0.6, 3) : 1;
+  layoutMap();
+  map2d.scrollLeft = cx * map2d.scrollWidth - map2d.clientWidth / 2;
+  map2d.scrollTop = cy * map2d.scrollHeight - map2d.clientHeight / 2;
+}
+mapInner.addEventListener('click', (e) => {
+  const b = e.target.closest('.m-seat'); if (!b) return;
+  const s = seatById.get(b.dataset.id);
+  toggleSeat(s);
+  if (e.detail) { showTip(s, e.clientX, e.clientY); clearTimeout(tapTipTimer); tapTipTimer = setTimeout(() => { tip.hidden = true; }, 1800); }
+});
+mapInner.addEventListener('dblclick', (e) => {
+  const b = e.target.closest('.m-seat'); if (!b) return;
+  setMode('3d'); seatView(seatById.get(b.dataset.id));
+});
+mapInner.addEventListener('pointerover', (e) => {
+  if (e.pointerType === 'touch') return;
+  const b = e.target.closest('.m-seat'); if (b) showTip(seatById.get(b.dataset.id), e.clientX, e.clientY);
+});
+mapInner.addEventListener('pointerout', (e) => { if (e.target.closest('.m-seat')) tip.hidden = true; });
+function setMode(m) {
+  mode = m;
+  stage.classList.toggle('is-2d', m === '2d');
+  map2d.hidden = m !== '2d';
+  document.querySelectorAll('[data-mode]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
+  tip.hidden = true; setHover(null);
+  if (m === '2d') { stopTour(); if (!mapBuilt) buildMap(); layoutMap(); requestAnimationFrame(centerMap); }
+  try { localStorage.setItem('lumen-mode', m); } catch (e) {}
+}
+document.querySelectorAll('[data-mode]').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));
 
 /* ---------------- Your own video on the screen ---------------- */
 let videoUrl = null;
@@ -1216,10 +1634,9 @@ function orderTotal() { return picked.reduce((a, s) => a + CLASSES[s.cls].price,
 const VIEWS_MODAL = {
   help() {
     modal.dataset.view = 'help';
-    const cards = [['tap', 'help_tap', 'var(--c-prime)'], ['dbl', 'help_dbl', 'var(--pick)'], ['drag', 'help_drag', 'var(--c-balcony)'], ['zoom', 'help_zoom', 'var(--c-classic)']];
+    const cards = [['tap', 'help_tap', 'var(--c-prime)'], ['dbl', 'help_dbl', 'var(--pick)'], ['drag', 'help_drag', 'var(--c-balcony)'], ['zoom', 'help_zoom', 'var(--c-classic)'], ['grid', 'help_2d', 'var(--fg)'], ['film', 'help_video', 'var(--accent)']];
     sheet.innerHTML = `<h2 id="sheetTitle">${t('help_title')}</h2>
-      <div class="help-grid">${cards.map(([ic, k, c]) => `<div class="help-card" style="--hc:${c}"><span class="big">${icon(ic)}</span>${t(k)}</div>`).join('')}
-        <div class="help-card wide" style="--hc:var(--accent)"><span class="big">${icon('film')}</span>${t('help_video')}</div></div>
+      <div class="help-grid">${cards.map(([ic, k, c]) => `<div class="help-card" style="--hc:${c}"><span class="big">${icon(ic)}</span>${t(k)}</div>`).join('')}</div>
       <div class="sheet-actions"><button type="button" class="cta" id="gotIt">${t('got_it')}</button></div>`;
     sheet.querySelector('#gotIt').focus();
   },
@@ -1260,6 +1677,7 @@ const VIEWS_MODAL = {
       picked.forEach((p) => { p.selected = false; p.booked = true; paint(p); });
       picked = []; Object.keys(cart).forEach((k) => delete cart[k]);
       renderPanel();
+      buildPeople();
     }
     const tk = lastTicket;
     const snacks = tk.snacks.map(([id, n]) => `${n}× ${t('s_' + id)}`).join(', ') || t('none');
@@ -1307,7 +1725,7 @@ function resize() {
   camera.fov = w / h < 1 ? 68 : 55;
   camera.updateProjectionMatrix();
 }
-new ResizeObserver(resize).observe(stage);
+new ResizeObserver(() => { resize(); if (mode === '2d') layoutMap(); }).observe(stage);
 resize();
 
 let first = true;
@@ -1372,8 +1790,8 @@ function frame(now) {
     moveQueued = null;
   }
 
-  renderer.render(scene, camera);
-  if (first) { first = false; $('#loading').remove(); }
+  if ((mode !== '2d' && !window.__loaderCovering) || first) renderer.render(scene, camera);
+  if (first) { first = false; $('#loading').remove(); window.__sceneReady = true; }
   requestAnimationFrame(frame);
 }
 
@@ -1383,8 +1801,9 @@ paintAll();
 renderPanel();
 markView('overview');
 flyTo(...VIEWS.overview, 2.2);
+try { if (localStorage.getItem('lumen-mode') === '2d') setMode('2d'); } catch (e) {}
 requestAnimationFrame(frame);
 let seenHelp = false;
 try { seenHelp = localStorage.getItem('lumen-help') === '1'; localStorage.setItem('lumen-help', '1'); } catch (e) {}
-if (!seenHelp) setTimeout(() => { if (modal.hidden) openModal('help'); }, 900);
+if (!seenHelp) setTimeout(() => { if (modal.hidden) openModal('help'); }, 3900);
 </script>
