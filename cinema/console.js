@@ -1,8 +1,11 @@
 // Lumen admin console: run the platform. Theatres & KYC, movie catalogue, offers, fees, bookings.
-import { CITIES, theatresFor, baseMovies, MOVIES, movieById, baseOffers, bookingMoney, showById, fromKey, hmLabel, isNowShowing, releaseDate, dayKey, today } from './data.js';
+import { CITIES, theatresFor, theatreById, baseMovies, MOVIES, movieById, baseOffers, bookingMoney, showById, fromKey, hmLabel, isNowShowing, releaseDate, dayKey, today, LIVE } from './data.js';
 import { icon, esc, inr, $, $$, toast, fmtDate, poster } from './ui.js';
+import { gate, openAccount } from './auth.js';
+import { uploadBox, bindUpload, bannerPreview, bannerState, STATUS } from './media.js';
 
-const TABS = [['overview', 'Overview'], ['theatres', 'Theatres'], ['movies', 'Movies'], ['offers', 'Offers'], ['fees', 'Fees'], ['bookings', 'Bookings']];
+const TABS = [['overview', 'Overview'], ['partners', 'Partners'], ['theatres', 'Theatres'], ['movies', 'Movies'], ['banners', 'Banners'], ['offers', 'Offers'], ['fees', 'Fees'], ['bookings', 'Bookings']];
+const USER_ST = { unverified: ['Email not verified', 'warn'], pending: ['Waiting for approval', 'warn'], active: ['Active', 'ok'], rejected: ['Rejected', 'bad'], disabled: ['Turned off', 'bad'] };
 const money = (v) => '₹' + (Math.round(v * 100) / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 });
 const chip = (label, tone) => `<span class="st st-${tone}">${esc(label)}</span>`;
 const KYC = { not_submitted: ['Not submitted', 'warn'], pending: ['Needs review', 'warn'], verified: ['Verified', 'ok'], rejected: ['Rejected', 'bad'] };
@@ -10,19 +13,86 @@ const LANGS = ['Tamil', 'English', 'Telugu', 'Hindi', 'Malayalam', 'Kannada'];
 const CERTS = ['U', 'U/A 7+', 'U/A 13+', 'U/A 16+', 'A'];
 const MOTIFS = ['sun', 'waves', 'leaf', 'stars', 'flame', 'arc', 'moon', 'road'];
 
-export function consoleView(view, tab, ctx) {
+let usersCache = null;
+export async function consoleView(view, tab, ctx) {
+  const u = gate(view, ctx, 'admin', 'console' + (tab !== 'overview' ? '-' + tab : ''));
+  if (!u) return;
   if (!TABS.some(([k]) => k === tab)) tab = 'overview';
   const pending = CITIES.flatMap((c) => theatresFor(c.id, { all: true })).filter((t) => (ctx.db.state.theatres[t.id]?.kycStatus) === 'pending').length;
+  const bnPending = ctx.db.state.banners.filter((b) => b.status === 'pending').length;
+  try { [usersCache] = await Promise.all([ctx.db.users(), ctx.db.refresh()]); } catch (e) { usersCache = usersCache || []; }
+  if (!ctx.isCurrent()) return;
+  const ptPending = usersCache.filter((x) => x.status === 'pending').length;
+  const cnt = { theatres: pending, banners: bnPending, partners: ptPending };
   view.innerHTML = `
-    <div class="topbar"><a class="iconbtn" href="#home" aria-label="Back">${icon('back')}</a><div class="sb-t"><b>Lumen admin console</b><small>Demo: no login yet. In production this is only for Lumen staff.</small></div>
-      <span class="st st-${ctx.db.mode === 'server' ? 'ok' : 'warn'}">${ctx.db.mode === 'server' ? 'Live server data' : 'Browser-only demo data'}</span></div>
-    <nav class="tabs" aria-label="Admin sections">${TABS.map(([k, l]) => `<a href="#console-${k}" ${k === tab ? 'aria-current="page"' : ''}>${l}${k === 'theatres' && pending ? ` <i class="cnt">${pending}</i>` : ''}</a>`).join('')}</nav>
+    <div class="topbar"><a class="iconbtn" href="#home" aria-label="Back">${icon('back')}</a><div class="sb-t"><b>Lumen admin console</b><small>${esc(u.name)} · ${esc(u.email)}</small></div>
+      <button type="button" class="btn ghost sm" id="acct">${icon('user')}<span class="hide-sm">Account</span></button></div>
+    <nav class="tabs" aria-label="Admin sections">${TABS.map(([k, l]) => `<a href="#console-${k}" ${k === tab ? 'aria-current="page"' : ''}>${l}${cnt[k] ? ` <i class="cnt">${cnt[k]}</i>` : ''}</a>`).join('')}</nav>
     <div id="ac"></div>`;
-  ({ overview, theatres, movies, offers, fees, bookings })[tab]($('#ac'), ctx);
+  $('#acct').addEventListener('click', () => openAccount(ctx));
+  ({ overview, partners, theatres, movies, banners, offers, fees, bookings })[tab]($('#ac'), ctx);
 }
 async function save(ctx, section, value, msg) {
   try { await ctx.db.put(section, value); toast(msg); ctx.route(); return true; }
-  catch (e) { toast('Could not save. Check the connection and try again.'); return false; }
+  catch (e) { toast(e.message || 'Could not save. Check the connection and try again.'); return false; }
+}
+
+/* ---------- partner accounts ---------- */
+function partners(host, ctx) {
+  const list = (usersCache || []).filter((x) => x.role === 'partner').sort((a, b) => (a.status === 'pending' ? -1 : 0) - (b.status === 'pending' ? -1 : 0) || b.createdAt - a.createdAt);
+  const req = (x) => { const r = x.request || {}; if (r.mode === 'existing') { const t = theatreById(r.theatreId); return `Runs <b>${esc(t ? t.name + ' · ' + t.area : r.theatreId)}</b>`; }
+    if (r.mode === 'new') return `New theatre <b>${esc(r.name)}</b>, ${esc(r.area)}, ${esc(CITIES.find((c) => c.id === r.cityId)?.en || r.cityId)}<small>${(r.screens || []).map((s) => `${esc(s.name)} (${esc(s.hall)}, ${esc(s.fmt)})`).join(' · ')}</small>`; return '—'; };
+  host.innerHTML = `<h2 class="sec">Partner accounts</h2>
+    ${list.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Partner</th><th>Theatre</th><th>Status</th><th></th></tr></thead><tbody>${list.map((x) => `<tr>
+      <td><b>${esc(x.name)}</b><small>${esc(x.email)} · +91 ${esc(x.phone || '')}<br>Registered ${new Date(x.createdAt).toLocaleDateString('en-IN')}</small></td>
+      <td>${req(x)}${x.theatreIds.length ? `<small>Linked: ${x.theatreIds.map((id) => esc(theatreById(id)?.name || id)).join(', ')}</small>` : ''}</td>
+      <td>${chip(...USER_ST[x.status])}${x.note ? `<small>${esc(x.note)}</small>` : ''}</td>
+      <td class="acts">${x.status === 'pending' ? `<button type="button" class="btn primary sm" data-ua="approve" data-id="${x.id}">${icon('check')}Approve</button><button type="button" class="btn ghost sm danger" data-ua="reject" data-id="${x.id}">Reject</button>` : ''}
+        ${x.status === 'active' ? `<button type="button" class="btn ghost sm danger" data-ua="disable" data-id="${x.id}">Turn off</button>` : ''}${x.status === 'disabled' ? `<button type="button" class="btn ghost sm" data-ua="enable" data-id="${x.id}">Turn on</button>` : ''}</td></tr>`).join('')}</tbody></table></div>`
+      : '<p class="empty">No partner registrations yet. Theatres register at #register.</p>'}
+    <p class="hint">Approving a “new theatre” request creates the theatre and its screens. The partner then sets up shows, prices, seat layouts and bank details.</p>`;
+  host.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-ua]'); if (!b) return;
+    const action = b.dataset.ua; let note = '';
+    if (action === 'reject') { note = prompt('Why is this registration not approved? The partner sees this.') || ''; if (note.trim().length < 5) { toast('Add a short reason (5+ characters).'); return; } }
+    if (action === 'disable' && !confirm('Turn off this partner account? They are signed out right away.')) return;
+    try { await ctx.db.userAction(b.dataset.id, action, { note }); await ctx.db.refresh(); toast({ approve: 'Approved. We emailed the partner.', reject: 'Registration rejected.', disable: 'Account turned off.', enable: 'Account turned on.' }[action]); ctx.route(); }
+    catch (x) { toast(x.message); }
+  });
+}
+
+/* ---------- banners ---------- */
+function banners(host, ctx) {
+  const { db } = ctx;
+  let filter = 'pending';
+  const draft = { title: '', sub: '', image: null, placement: 'home' };
+  const render = () => {
+    const all = db.state.banners;
+    const list = all.filter((b) => filter === 'all' || bannerState(b) === filter);
+    const by = (b) => (b.theatreId ? esc(theatreById(b.theatreId)?.name || b.theatreId) : 'Lumen');
+    host.innerHTML = `<div class="sec-row"><h2 class="sec">Banners</h2><div class="filters">${[['pending', 'To review'], ['live', 'Live'], ['scheduled', 'Starts later'], ['rejected', 'Rejected'], ['expired', 'Ended'], ['all', 'All']].map(([k, l]) => `<button type="button" class="fchip" data-f="${k}" aria-pressed="${filter === k}">${l} (${k === 'all' ? all.length : all.filter((b) => bannerState(b) === k).length})</button>`).join('')}</div></div>
+      ${list.length ? `<div class="bn-list">${list.map((b) => `<article class="bn-item">${bannerPreview(b)}<div class="bn-meta">${chip(...STATUS[bannerState(b)])}<small><b>${by(b)}</b> · ${b.placement === 'theatre' ? 'Theatre page' : 'Home page'} · ${esc(b.from || 'now')} → ${esc(b.to || 'no end')}${b.movieId && movieById(b.movieId) ? ' · links to ' + esc(movieById(b.movieId).title) : ''}</small>${b.note ? `<small>Note: ${esc(b.note)}</small>` : ''}
+        <span class="acts">${b.status !== 'live' ? `<button type="button" class="btn primary sm" data-bs="live" data-id="${b.id}">${icon('check')}Approve</button>` : ''}${b.status !== 'rejected' ? `<button type="button" class="btn ghost sm danger" data-bs="rejected" data-id="${b.id}">${b.status === 'live' ? 'Take down' : 'Reject'}</button>` : ''}<button type="button" class="btn ghost sm danger" data-bdel="${b.id}">${icon('trash')}</button></span></div></article>`).join('')}</div>` : '<p class="empty">Nothing here.</p>'}
+      <section class="panel narrow"><h2>Lumen banner (goes live right away)</h2>
+        ${uploadBox({ id: 'upLB', label: 'Banner image', hint: '1600 × 600 works best', value: draft.image, ratio: '8 / 3' })}
+        <label class="af"><span>Title</span><input class="input" id="lbT" maxlength="60" value="${esc(draft.title)}"></label>
+        <label class="af"><span>Line under the title</span><input class="input" id="lbS" maxlength="90" value="${esc(draft.sub)}"></label>
+        <p class="err" id="lbErr"></p><button type="button" class="btn primary" id="lbGo">${icon('send')}Publish banner</button></section>`;
+    host.querySelector('.filters').addEventListener('click', (e) => { const b = e.target.closest('[data-f]'); if (b) { filter = b.dataset.f; render(); } });
+    host.querySelectorAll('[data-bs]').forEach((b) => b.addEventListener('click', async () => {
+      let note = '';
+      if (b.dataset.bs === 'rejected') { note = prompt('Tell the theatre why (they see this):') || ''; if (note.trim().length < 5) { toast('Add a short reason (5+ characters).'); return; } }
+      try { await db.reviewBanner(b.dataset.id, b.dataset.bs, note); toast(b.dataset.bs === 'live' ? 'Banner approved. Customers see it now.' : 'Banner rejected.'); render(); } catch (x) { toast(x.message); }
+    }));
+    host.querySelectorAll('[data-bdel]').forEach((b) => b.addEventListener('click', async () => { if (!confirm('Delete this banner?')) return; try { await db.deleteBanner(b.dataset.bdel); render(); } catch (x) { toast(x.message); } }));
+    const keep = () => { draft.title = $('#lbT').value.trim(); draft.sub = $('#lbS').value.trim(); };
+    bindUpload(host, 'upLB', db, (url) => { keep(); draft.image = url; render(); });
+    $('#lbGo').addEventListener('click', async () => {
+      keep(); if (!draft.image || draft.title.length < 3) { $('#lbErr').textContent = 'Upload an image and add a title.'; return; }
+      try { await db.addBanner({ ...draft }); Object.assign(draft, { title: '', sub: '', image: null }); filter = 'live'; toast('Banner is live.'); render(); } catch (x) { $('#lbErr').textContent = x.message; }
+    });
+  };
+  render();
 }
 
 /* ---------- overview ---------- */
@@ -85,15 +155,17 @@ function movies(host, ctx) {
   const hidden = new Set(ctx.db.state.hiddenMovies || []);
   const custom = ctx.db.state.movies || [];
   const row = (m, isCustom) => `<tr><td class="tb-post">${poster(m)}</td><td><b>${esc(m.title)}</b><small>${esc(m.lang)} · ${esc(m.cert)} · ${m.mins} min · ${esc((m.genres || []).join(', '))}</small></td>
-    <td>${isCustom ? fmtDate(releaseDate(movieById(m.id) || { rel: 0 })) : m.rel <= 0 ? 'In cinemas' : fmtDate(releaseDate(m))}</td>
+    <td>${(() => { const lm = movieById(m.id) || m; const md = LIVE.media.movies[m.id] || {}; const rel = isCustom ? fmtDate(releaseDate(lm)) : m.rel <= 0 ? 'In cinemas' : fmtDate(releaseDate(m));
+      return rel + (lm.left != null ? `<small>${lm.left <= 0 ? 'Left cinemas' : lm.left <= 3 ? `Leaving in ${lm.left} day${lm.left > 1 ? 's' : ''}` : `Last day in ${lm.left} days`}</small>` : '') + `<small>${[md.poster && 'Poster', md.banner && 'Banner', md.trailer && 'Trailer'].filter(Boolean).join(' · ') || 'No uploads yet'}</small>`; })()}</td>
     <td>${hidden.has(m.id) ? chip('Hidden', 'bad') : chip(isCustom ? 'Added by Lumen' : 'Live', 'ok')}</td>
-    <td class="acts">${isCustom ? `<button type="button" class="btn ghost sm" data-edit="${m.id}">Edit</button><button type="button" class="btn ghost sm danger" data-delm="${m.id}">Remove</button>` : `<button type="button" class="btn ghost sm" data-hide="${m.id}">${hidden.has(m.id) ? 'Show' : 'Hide'}</button>`}</td></tr>`;
+    <td class="acts"><button type="button" class="btn ghost sm" data-media="${m.id}">${icon('image')}Media</button>${isCustom ? `<button type="button" class="btn ghost sm" data-edit="${m.id}">Edit</button><button type="button" class="btn ghost sm danger" data-delm="${m.id}">Remove</button>` : `<button type="button" class="btn ghost sm" data-hide="${m.id}">${hidden.has(m.id) ? 'Show' : 'Hide'}</button>`}</td></tr>`;
   host.innerHTML = `<div class="sec-row"><h2 class="sec">Movie catalogue</h2><button type="button" class="btn primary sm" id="addMovie">${icon('plus')}Add movie</button></div>
     <div class="tbl-wrap"><table class="tbl"><thead><tr><th></th><th>Movie</th><th>Release</th><th>Status</th><th></th></tr></thead><tbody>
     ${custom.map((m) => row(m, true)).join('')}${baseMovies().map((m) => row(m, false)).join('')}</tbody></table></div>
     <p class="hint">Hidden movies disappear from the app. Theatres can schedule any movie that is in cinemas or releases within 14 days.</p>`;
   $('#addMovie').addEventListener('click', () => movieForm(null, ctx));
   host.addEventListener('click', (e) => {
+    const md = e.target.closest('[data-media]'); if (md) { mediaSheet(md.dataset.media, ctx); return; }
     const h = e.target.closest('[data-hide]'), ed = e.target.closest('[data-edit]'), d = e.target.closest('[data-delm]');
     if (h) { const id = h.dataset.hide; const next = hidden.has(id) ? [...hidden].filter((x) => x !== id) : [...hidden, id]; save(ctx, 'hiddenMovies', next, hidden.has(id) ? 'Movie is visible again.' : 'Movie hidden from the app.'); }
     if (ed) movieForm(custom.find((m) => m.id === ed.dataset.edit), ctx);
@@ -101,7 +173,7 @@ function movies(host, ctx) {
   });
 }
 function movieForm(m, ctx) {
-  const v = m || { title: '', sub: '', lang: 'Tamil', langs: [], genres: [], cert: 'U/A 13+', mins: 140, release: new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10), imax: false, c1: '#14161f', c2: '#e5414f', motif: 'stars', cast: [], about: '' };
+  const v = m || { title: '', sub: '', lang: 'Tamil', langs: [], genres: [], cert: 'U/A 13+', mins: 140, release: new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10), imax: false, c1: '#14161f', c2: '#ffc72c', motif: 'stars', cast: [], about: '' };
   ctx.openSheet(`<h2 class="sh-t">${m ? 'Edit movie' : 'Add a movie'}</h2>
     <form id="mvForm" class="pt-form" novalidate>
       <div class="af-grid"><label class="af"><span>Title</span><input class="input" name="title" value="${esc(v.title)}" maxlength="40" required></label><label class="af"><span>Subtitle (optional)</span><input class="input" name="sub" value="${esc(v.sub || '')}" maxlength="40"></label></div>
@@ -138,6 +210,27 @@ function movieForm(m, ctx) {
       await save(ctx, 'movies', m ? custom.map((x) => (x.id === id ? mv : x)) : [mv, ...custom], m ? 'Movie updated.' : `${mv.title} added. Theatres can now schedule it.`);
     });
   });
+}
+
+// Poster, wide banner, trailer and last day in cinemas for any movie
+function mediaSheet(id, ctx) {
+  const { db } = ctx;
+  const render = () => {
+    const m = movieById(id), md = db.state.media.movies[id] || {};
+    ctx.openSheet(`<h2 class="sh-t">${icon('image')}${esc(m.title)} · media</h2>
+      <div class="media-grid">${uploadBox({ id: 'upP', label: 'Poster', hint: 'Tall image · 2:3 (e.g. 800 × 1200)', value: md.poster, ratio: '2 / 3' })}
+      <div>${uploadBox({ id: 'upB', label: 'Banner', hint: 'Wide image for the home carousel and movie page · 16:9', value: md.banner })}
+      ${uploadBox({ id: 'upT', label: 'Trailer', hint: 'Plays on the movie page', kind: 'video', value: md.trailer })}</div></div>
+      <label class="af"><span>Last day in cinemas (optional)</span><span class="row-btns"><input class="input" type="date" id="mLast" value="${esc(md.lastDay || m.lastDay || '')}"><button type="button" class="btn ghost sm" id="mLastSave">${icon('check')}Save</button></span></label>
+      <p class="hint">Customers see “Last 3 days” from 3 days before this date. The movie and its shows disappear after it.${!md.lastDay && m.run ? ` Without a date, this demo movie ends ${m.left > 0 ? `in ${m.left} days` : 'today'}.` : ''}</p>`, (sh) => {
+      const put = async (f, msg) => { await db.setMedia('movie', id, f); toast(msg); render(); };
+      bindUpload(sh, 'upP', db, (url) => put({ poster: url }, url ? 'Poster saved' : 'Poster removed'));
+      bindUpload(sh, 'upB', db, (url) => put({ banner: url }, url ? 'Banner saved' : 'Banner removed'));
+      bindUpload(sh, 'upT', db, (url) => put({ trailer: url }, url ? 'Trailer saved' : 'Trailer removed'));
+      sh.querySelector('#mLastSave').addEventListener('click', () => put({ lastDay: sh.querySelector('#mLast').value || null }, 'Last day saved').catch((x) => toast(x.message)));
+    });
+  };
+  render();
 }
 
 /* ---------- offers ---------- */
@@ -217,7 +310,7 @@ function bookings(host, ctx) {
     $('#bCity').addEventListener('change', (e) => { city = e.target.value; render(); });
     host.querySelectorAll('[data-cx]').forEach((b) => b.addEventListener('click', async () => {
       const bk = ctx.db.allBookings().find((x) => x.id === b.dataset.cx); if (!bk) return;
-      try { await ctx.db.cancel(bk.id, bookingMoney(bk).ticket); toast('Booking cancelled with a full ticket refund.'); render(); } catch (e) { toast('Could not cancel. Check the connection and try again.'); }
+      try { await ctx.db.cancel(bk.id, bookingMoney(bk).ticket); toast('Booking cancelled with a full ticket refund.'); render(); } catch (e) { toast(e.message); }
     }));
   };
   render();

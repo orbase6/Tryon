@@ -1,9 +1,11 @@
 // Theatre partner panel: what a theatre owner uses to run their screens on Lumen.
 import { CITIES, MOVIES, CLASS_META, movieById, isNowShowing, theatresFor, theatreById, showsFor, today, addDays, dayKey, fromKey, hmLabel, releaseDate, screenDay, bookingMoney, showById } from './data.js';
 import { HALLS, layoutFor, pricesFor, customFor, hallName } from './layout.js';
-import { icon, esc, inr, $, $$, toast, clsName, tx, fmtDate, state } from './ui.js';
+import { icon, esc, inr, $, $$, toast, clsName, tx, fmtDate, state, poster } from './ui.js';
+import { gate, openAccount } from './auth.js';
+import { uploadBox, bindUpload, moviePicker, bindMoviePicker, bannerPreview, bannerState, STATUS } from './media.js';
 
-const TABS = [['overview', 'Overview'], ['shows', 'Shows'], ['prices', 'Prices'], ['layouts', 'Seat layouts'], ['kyc', 'Bank & KYC'], ['sales', 'Sales & payouts']];
+const TABS = [['overview', 'Overview'], ['shows', 'Shows'], ['prices', 'Prices'], ['layouts', 'Seat layouts'], ['media', 'Photos & banners'], ['kyc', 'Bank & KYC'], ['sales', 'Sales & payouts']];
 const KYC_LABEL = { not_submitted: ['Not submitted', 'warn'], pending: ['Under review', 'warn'], verified: ['Verified', 'ok'], rejected: ['Rejected', 'bad'] };
 const money = (v) => '₹' + (Math.round(v * 100) / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 });
 const chip = ([label, tone]) => `<span class="st st-${tone}">${esc(label)}</span>`;
@@ -11,24 +13,100 @@ const cityOf = (th) => CITIES.find((c) => c.id === th.cityId);
 const bookingsOf = (db, th) => db.allBookings().filter((b) => b.kind === 'movie' && (b.theatreId || (showById(b.showId) || {}).theatreId) === th.id);
 const weekStart = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d; };
 
-export function partnerView(view, theatreId, tab, ctx) {
-  const all = CITIES.flatMap((c) => theatresFor(c.id, { all: true }));
-  const th = (theatreId && theatreById(theatreId)) || theatresFor(ctx.city(), { all: true })[0];
+export async function partnerView(view, theatreId, tab, ctx) {
+  if (!gate(view, ctx, 'staff', 'partner' + (theatreId ? '-' + theatreId : '') + (tab !== 'overview' ? '-' + tab : ''))) return;
+  try { await ctx.db.refresh(); } catch (e) { /* show what we have */ }
+  if (!ctx.isCurrent()) return;
+  const u = ctx.db.me; if (!u) { location.replace('#login-partner'); return; }
+  const mine = u.role === 'admin' ? CITIES.flatMap((c) => theatresFor(c.id, { all: true })) : (u.theatreIds || []).map(theatreById).filter(Boolean);
+  if (!mine.length) {
+    view.innerHTML = `<div class="topbar"><a class="iconbtn" href="#home" aria-label="Back">${icon('back')}</a><div class="sb-t"><b>Partner panel</b><small>${esc(u.email)}</small></div><button type="button" class="btn ghost sm" id="acct">${icon('user')}Account</button></div>
+      <div class="notice">${icon('clock')}<span>No theatre is linked to your account yet. Lumen links it when your registration is approved.</span></div>`;
+    $('#acct').addEventListener('click', () => openAccount(ctx)); return;
+  }
+  const th = mine.find((t) => t.id === theatreId) || mine[0];
   if (!TABS.some(([k]) => k === tab)) tab = 'overview';
   const info = ctx.db.state.theatres[th.id] || {};
   const kyc = KYC_LABEL[info.kycStatus || 'not_submitted'];
+  const groups = CITIES.map((c) => [c, mine.filter((t) => t.cityId === c.id)]).filter(([, l]) => l.length);
   view.innerHTML = `
     <div class="topbar"><a class="iconbtn" href="#home" aria-label="Back">${icon('back')}</a>
-      <div class="sb-t"><b>Partner panel</b><small>Signed in as the owner of ${esc(th.name)}, ${esc(th.area)} (demo: no login yet)</small></div>
-      <label class="dd"><select id="ptTheatre" aria-label="Theatre">${CITIES.map((c) => `<optgroup label="${esc(c.en)}">${theatresFor(c.id, { all: true }).map((t2) => `<option value="${t2.id}" ${t2.id === th.id ? 'selected' : ''}>${esc(t2.name)} · ${esc(t2.area)}</option>`).join('')}</optgroup>`).join('')}</select></label></div>
+      <div class="sb-t"><b>Partner panel</b><small>${esc(u.name)} · ${esc(u.email)}${u.role === 'admin' ? ' · admin' : ''}</small></div>
+      ${mine.length > 1 ? `<label class="dd"><select id="ptTheatre" aria-label="Theatre">${groups.map(([c, l]) => `<optgroup label="${esc(c.en)}">${l.map((t2) => `<option value="${t2.id}" ${t2.id === th.id ? 'selected' : ''}>${esc(t2.name)} · ${esc(t2.area)}</option>`).join('')}</optgroup>`).join('')}</select></label>` : ''}
+      <button type="button" class="btn ghost sm" id="acct">${icon('user')}<span class="hide-sm">Account</span></button></div>
     <div class="pt-head"><h1>${esc(th.name)}</h1><span class="muted">${esc(th.area)}, ${esc(cityOf(th).en)}</span>
       ${chip(th.status === 'suspended' ? ['Suspended by Lumen', 'bad'] : ['Live on Lumen', 'ok'])} ${chip(['KYC: ' + kyc[0], kyc[1]])}</div>
     <nav class="tabs" aria-label="Partner sections">${TABS.map(([k, l]) => `<a href="#partner-${th.id}-${k}" ${k === tab ? 'aria-current="page"' : ''}>${l}</a>`).join('')}</nav>
     <div id="pt"></div>`;
-  $('#ptTheatre').addEventListener('change', (e) => { location.hash = `partner-${e.target.value}-${tab}`; });
+  $('#ptTheatre')?.addEventListener('change', (e) => { location.hash = `partner-${e.target.value}-${tab}`; });
+  $('#acct').addEventListener('click', () => openAccount(ctx));
   const host = $('#pt');
-  ({ overview, shows, prices, layouts, kyc: kycTab, sales })[tab](host, th, ctx);
+  ({ overview, shows, prices, layouts, media: mediaTab, kyc: kycTab, sales })[tab](host, th, ctx);
 }
+
+/* ---------- photos & banners ---------- */
+function mediaTab(host, th, ctx) {
+  const { db } = ctx;
+  const md = () => db.state.media.theatres[th.id] || {};
+  const draft = { title: '', sub: '', image: null, movieId: '', placement: 'home', from: dayKeyIso(0), to: dayKeyIso(14) };
+  function render() {
+    const m = md(), photos = m.photos || [];
+    const mine = db.state.banners.filter((b) => b.theatreId === th.id);
+    const movies = MOVIES.filter((x) => isNowShowing(x) || x.rel <= 30);
+    host.innerHTML = `
+      <div class="pt-cols">
+        <section class="panel"><h2>Theatre photos</h2><p class="muted">Customers see the cover photo on theatre cards and at the top of your theatre page. Without one, a ticket picture is shown.</p>
+          ${uploadBox({ id: 'upCover', label: 'Cover photo', hint: 'Wide photo of your entrance or hall · 16:9', value: m.cover })}
+          <div class="ph-grid">${photos.map((p, i) => `<figure class="ph"><img src="${esc(p)}" alt="" loading="lazy"><button type="button" class="iconbtn sm" data-ph-rm="${i}" aria-label="Remove photo">${icon('x')}</button></figure>`).join('')}
+            ${photos.length < 8 ? uploadBox({ id: 'upPhoto', label: `More photos (${photos.length}/8)`, hint: 'Lobby, seats, food court', ratio: '4 / 3' }) : ''}</div>
+        </section>
+        <section class="panel"><h2>New banner</h2><p class="muted">Promote a movie, an offer or your food. Lumen checks every banner before customers see it.</p>
+          <form id="bnForm" class="pt-form" novalidate>
+            ${uploadBox({ id: 'upBanner', label: 'Banner image', hint: 'Wide image · 1600 × 600 works best', value: draft.image, ratio: '8 / 3' })}
+            <label class="af"><span>Title</span><input class="input" id="bnTitle" maxlength="60" value="${esc(draft.title)}" placeholder="Weekend IMAX marathon"></label>
+            <label class="af"><span>Line under the title (optional)</span><input class="input" id="bnSub" maxlength="90" value="${esc(draft.sub)}" placeholder="Free caramel popcorn with 2 tickets"></label>
+            <div class="af"><span>Link to a movie (optional)</span>${moviePicker('bnMovie', [{ id: '', title: 'No movie', lang: 'Opens your theatre page', mins: 0, c1: '#14161f', c2: '#ffc72c', motif: '', poster: null }, ...movies], draft.movieId, (x) => (x.id ? `${x.lang} · ${x.mins} min` : 'Opens your theatre page'))}</div>
+            <div class="af"><span>Where to show it</span><div class="seg" role="group" id="bnPlace"><button type="button" data-pl="home" aria-pressed="${draft.placement === 'home'}">Home page (${esc(cityOf(th).en)})</button><button type="button" data-pl="theatre" aria-pressed="${draft.placement === 'theatre'}">My theatre page</button></div></div>
+            <div class="af-grid"><label class="af"><span>Show from</span><input class="input" type="date" id="bnFrom" value="${draft.from}"></label><label class="af"><span>Until</span><input class="input" type="date" id="bnTo" value="${draft.to}"></label></div>
+            <div id="bnPrev">${bannerPreview(draft)}</div>
+            <p class="err" id="bnErr"></p>
+            <button type="submit" class="btn primary">${icon('send')}Send for review</button>
+          </form></section>
+      </div>
+      <h2 class="sec">Your banners</h2>
+      ${mine.length ? `<div class="bn-list">${mine.map((b) => { const st = bannerState(b); return `<article class="bn-item"><div class="banner sm"><img src="${esc(b.image)}" alt="" loading="lazy"><div class="banner-txt"><b>${esc(b.title)}</b>${b.sub ? `<small>${esc(b.sub)}</small>` : ''}</div></div>
+        <div class="bn-meta">${chip(STATUS[st])}<small>${b.placement === 'theatre' ? 'Theatre page' : 'Home page'} · ${esc(b.from || 'now')} → ${esc(b.to || 'no end')}${b.movieId && movieById(b.movieId) ? ' · ' + esc(movieById(b.movieId).title) : ''}</small>${b.note ? `<small class="bad-t">Lumen: ${esc(b.note)}</small>` : ''}
+        <button type="button" class="btn ghost sm danger" data-bn-del="${b.id}">${icon('trash')}Delete</button></div></article>`; }).join('')}</div>` : '<p class="empty">No banners yet.</p>'}
+      <p class="hint">“Live” means customers in ${esc(cityOf(th).en)} see the banner right now. Banners stop by themselves after the end date.</p>`;
+    const saveMedia = async (fields, msg) => { await db.setMedia('theatre', th.id, fields); toast(msg); render(); };
+    bindUpload(host, 'upCover', db, (url) => saveMedia({ cover: url }, url ? 'Cover photo saved' : 'Cover photo removed'));
+    bindUpload(host, 'upPhoto', db, (url) => url && saveMedia({ photos: [...photos, url] }, 'Photo added'));
+    host.querySelectorAll('[data-ph-rm]').forEach((b) => b.addEventListener('click', () => saveMedia({ photos: photos.filter((_, i) => i !== +b.dataset.phRm) }, 'Photo removed').catch((e) => toast(e.message))));
+    const keep = () => Object.assign(draft, { title: $('#bnTitle').value.trim(), sub: $('#bnSub').value.trim(), movieId: $('#bnMovie').dataset.value, from: $('#bnFrom').value, to: $('#bnTo').value });
+    const prev = () => { keep(); $('#bnPrev').innerHTML = bannerPreview(draft); };
+    bindUpload(host, 'upBanner', db, (url) => { keep(); draft.image = url; render(); });
+    bindMoviePicker(host, 'bnMovie', prev);
+    ['bnTitle', 'bnSub'].forEach((i) => $('#' + i).addEventListener('input', prev));
+    $('#bnPlace').addEventListener('click', (e) => { const b = e.target.closest('[data-pl]'); if (!b) return; draft.placement = b.dataset.pl; $$('#bnPlace button').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); prev(); });
+    $('#bnForm').addEventListener('submit', async (e) => {
+      e.preventDefault(); keep(); const err = $('#bnErr');
+      if (!draft.image) { err.textContent = 'Upload a banner image first.'; return; }
+      if (draft.title.length < 3) { err.textContent = 'Add a short title.'; return; }
+      if (draft.from && draft.to && draft.to < draft.from) { err.textContent = 'The end date is before the start date.'; return; }
+      try {
+        const b = await db.addBanner({ theatreId: th.id, cityId: th.cityId, ...draft, movieId: draft.movieId || null });
+        toast(b.status === 'live' ? 'Banner is live.' : 'Sent. Lumen will review your banner, usually within a day.');
+        Object.assign(draft, { title: '', sub: '', image: null, movieId: '' }); render();
+      } catch (x) { err.textContent = x.message; }
+    });
+    host.querySelectorAll('[data-bn-del]').forEach((b) => b.addEventListener('click', async () => {
+      if (!confirm('Delete this banner? Customers will stop seeing it.')) return;
+      try { await db.deleteBanner(b.dataset.bnDel); toast('Banner deleted'); render(); } catch (x) { toast(x.message); }
+    }));
+  }
+  render();
+}
+const dayKeyIso = (n) => { const d = addDays(today(), n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
 /* ---------- overview ---------- */
 function overview(host, th, ctx) {
@@ -56,7 +134,7 @@ function overview(host, th, ctx) {
 
 /* ---------- show scheduler ---------- */
 function shows(host, th, ctx) {
-  let si = 0, dk = dayKey(today());
+  let si = 0, dk = dayKey(today()), pick = null;
   const sch = () => ctx.db.state.schedule;
   const ci = CITIES.findIndex((c) => c.id === th.cityId);
   function render() {
@@ -74,7 +152,7 @@ function shows(host, th, ctx) {
         </section>
         <section class="panel"><h2>Add shows</h2>
           <form id="addForm" class="pt-form" novalidate>
-            <label class="af"><span>Movie</span><span class="dd"><select id="aMovie">${movies.map((m) => `<option value="${m.id}">${esc(m.title)} (${esc(m.lang)}, ${m.mins} min)${isNowShowing(m) ? '' : ' · releases ' + fmtDate(releaseDate(m))}</option>`).join('')}</select></span></label>
+            <div class="af"><span>Movie</span>${moviePicker('aMovie', movies, pick, (m) => `${m.lang} · ${m.mins} min${isNowShowing(m) ? (m.left != null && m.left <= 3 ? ` · leaves cinemas in ${m.left} day${m.left > 1 ? 's' : ''}` : '') : ' · releases ' + fmtDate(releaseDate(m))}`)}</div>
             <label class="af"><span>Start times (24-hour, comma separated)</span><input class="input" id="aTimes" value="10:00, 13:30, 17:15, 21:00" autocomplete="off"></label>
             <div class="af-grid"><label class="af"><span>From</span><span class="dd"><select id="aFrom">${days.map((d) => `<option value="${dayKey(d)}" ${dayKey(d) === dk ? 'selected' : ''}>${fmtDate(d)}</option>`).join('')}</select></span></label>
               <label class="af"><span>For how many days</span><span class="af-in"><input type="number" id="aDays" min="1" max="14" value="7"><small>days</small></span></label></div>
@@ -84,6 +162,7 @@ function shows(host, th, ctx) {
           </form>
         </section>
       </div>`;
+    bindMoviePicker(host, 'aMovie', (id) => { pick = id; });
     host.querySelector('.filters').addEventListener('click', (e) => { const b = e.target.closest('[data-sc]'); if (b) { si = +b.dataset.sc; render(); } });
     host.querySelector('.days').addEventListener('click', (e) => { const b = e.target.closest('[data-dk]'); if (b) { dk = b.dataset.dk; render(); } });
     $('#ownSch')?.addEventListener('click', async () => {
@@ -102,7 +181,7 @@ function shows(host, th, ctx) {
       e.preventDefault();
       const err = $('#aErr'); err.textContent = '';
       if (!own) { err.textContent = 'Switch to your own schedule first (button above).'; return; }
-      const mv = movieById($('#aMovie').value);
+      const mv = movieById($('#aMovie').dataset.value); if (!mv) { err.textContent = 'Pick a movie.'; return; }
       const times = $('#aTimes').value.split(/[,\s]+/).filter(Boolean);
       const bad = times.filter((x) => !/^([01]?\d|2[0-3]):[0-5]\d$/.test(x));
       if (!times.length || bad.length) { err.textContent = `Write times like 10:00, 18:45${bad.length ? ` (check: ${bad.join(', ')})` : ''}.`; return; }
@@ -125,7 +204,7 @@ function shows(host, th, ctx) {
     });
   }
   async function save(value, msg) {
-    try { await ctx.db.put('schedule', value); toast(msg); render(); } catch (e) { toast('Could not save. Check the connection and try again.'); }
+    try { await ctx.db.put('schedule', value); toast(msg); render(); } catch (e) { toast(e.message || 'Could not save. Check the connection and try again.'); }
   }
   render();
 }
@@ -146,7 +225,7 @@ function prices(host, th, ctx) {
     f.querySelectorAll('input').forEach((i) => { const v = +i.value; if (!(v >= 0 && v <= 5000)) bad = true; vals[i.name] = Math.round(v); });
     if (bad) { f.querySelector('.err').textContent = 'Prices must be between ₹0 and ₹5,000.'; return; }
     try { await ctx.db.put('prices', { ...ctx.db.state.prices, [f.dataset.sc]: vals }); toast('Prices saved. New bookings use them right away.'); f.querySelector('.err').textContent = ''; }
-    catch (err) { toast('Could not save. Check the connection and try again.'); }
+    catch (err) { toast(err.message || 'Could not save. Check the connection and try again.'); }
   }));
 }
 
@@ -205,7 +284,7 @@ function kycTab(host, th, ctx) {
     try {
       await ctx.db.put('theatres', { ...ctx.db.state.theatres, [th.id]: { ...cur, kyc, kycStatus: 'pending', kycNote: '' } });
       toast('Submitted. Lumen will verify your details, usually within 2 working days.'); ctx.route();
-    } catch (err) { toast('Could not save. Check the connection and try again.'); }
+    } catch (err) { toast(err.message || 'Could not save. Check the connection and try again.'); }
   });
 }
 

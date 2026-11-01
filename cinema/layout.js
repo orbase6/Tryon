@@ -194,13 +194,13 @@ export function scoreLabel(score) {
   return score >= 88 ? 'perfect' : score >= 75 ? 'great' : score >= 60 ? 'good' : score >= 45 ? 'okay' : 'poor';
 }
 export function scoreColor(score) {
-  // Blend of the two brand accents: red (tough view) to teal (great view)
+  // Blend of two brand colours: red (tough view) to yellow (great view)
   const k = Math.max(0, Math.min(1, (score - 35) / 60));
-  return `color-mix(in srgb, var(--teal) ${Math.round(k * 100)}%, var(--red))`;
+  return `color-mix(in srgb, var(--yel) ${Math.round(k * 100)}%, var(--red))`;
 }
 export function scoreHex(score) {
   const k = Math.max(0, Math.min(1, (score - 35) / 60));
-  const a = [0xe5, 0x41, 0x4f], b = [0x0e, 0x9f, 0x9f];
+  const a = [0xe5, 0x41, 0x4f], b = [0xff, 0xc7, 0x2c];
   return '#' + a.map((v, i) => Math.round(v + (b[i] - v) * k).toString(16).padStart(2, '0')).join('');
 }
 

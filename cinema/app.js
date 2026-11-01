@@ -2,11 +2,12 @@
 import {
   CITIES, MOVIES, CLASS_META, SNACKS, FEE_PER_TICKET, CONV_FEE, GST, HOLD_MINUTES, OFFERS, EVENT_CATS, EVENTS, PREMIERES,
   movieById, eventById, premiereById, isNowShowing, theatresFor, theatreById, showsFor, showById, today, addDays, dayKey, fromKey,
-  hmLabel, partOfDay, releaseDate, mulberry32, hash,
+  hmLabel, partOfDay, releaseDate, mulberry32, hash, leavingSoon, liveBanners, nearestCity, LIVE,
 } from './data.js';
 import { HALLS, getLayout, buildLayout, layoutOf, pricesOf, layoutFor, pricesFor, hallName, setCustomLayouts, customFor, specOfHall, rowsToText, textToRows, parsePlan, REC_CLASSES, bookedFor, bestBlock, blockAround, scoreLabel, scoreColor } from './layout.js';
 import { mountMap } from './map2d.js';
-import { t, tx, state, icon, inr, esc, clsName, poster, $, $$, toast, fmtDate, compact, deviceTier } from './ui.js';
+import { t, tx, state, icon, inr, esc, clsName, poster, posterArt, ticketArt, $, $$, toast, fmtDate, compact, deviceTier } from './ui.js';
+import { loginView, forgotView, registerView, openAccount, gate } from './auth.js';
 import { createAgent } from './agent.js';
 import { adminView as renderAdmin } from './admin.js';
 import { partnerView as renderPartner } from './partner.js';
@@ -67,6 +68,8 @@ function renderHeader() {
   const n = S.bookings.filter((b) => !b.cancelled).length;
   $('#ticketsBtn').innerHTML = `${icon('ticket')}<span class="hide-sm">${t('my_tickets')}</span>${n ? `<i class="badge">${n}</i>` : ''}`;
   $('#askFab').innerHTML = `${icon('mic')}<span>${t('voice')}</span>`;
+  const me = db.me; $('#acctBtn').hidden = !me;
+  if (me) { $('#acctBtn').innerHTML = icon('user'); $('#acctBtn').setAttribute('aria-label', `Account: ${me.name}`); }
   const cur = (location.hash.slice(1) || 'home');
   $('#cats').innerHTML = CATS.map(([r, en, ta]) => `<a href="#${r}" ${cur === r || (r === 'home' && /^(movie|shows|show)-/.test(cur)) ? 'aria-current="page"' : ''}>${state.lang === 'ta' ? ta : en}</a>`).join('');
   document.documentElement.lang = state.lang === 'ta' ? 'ta' : 'en';
@@ -82,6 +85,9 @@ function route() {
   renderHeader();
   $('#askFab').hidden = !(h === 'home' || /^(movie|shows)-/.test(h));
   if (h === 'home') return homeView();
+  if ((m = /^login(?:-(.+))?$/.exec(h))) return loginView(view, panelCtx(), m[1] ? '#' + decodeURIComponent(m[1]) : '');
+  if (h === 'forgot') return forgotView(view, panelCtx());
+  if ((m = /^register(?:-verify-(.+))?$/.exec(h))) return registerView(view, panelCtx(), m[1] ? decodeURIComponent(m[1]) : '');
   if ((m = /^movie-([a-z0-9]+)$/.exec(h))) return movieView(m[1]);
   if ((m = /^shows-([a-z0-9]+)$/.exec(h))) return showsView(m[1]);
   if ((m = /^show-([a-z0-9]+)$/.exec(h))) return seatsView(m[1]);
@@ -100,28 +106,48 @@ function route() {
 }
 
 /* ---------- home ---------- */
-function card(m, href = `#movie-${m.id}`, tag = '') {
-  const up = m.rel > 0;
+const L = (en, ta) => (state.lang === 'ta' && ta ? ta : en);
+const daysAgo = (m) => (m.rel === 0 ? L('Out today', 'இன்று வெளியீடு') : m.rel === -1 ? L('Released yesterday', 'நேற்று வெளியீடு') : L(`Released ${-m.rel} days ago`, `${-m.rel} நாள் முன் வெளியீடு`));
+const leftLabel = (m) => (m.left === 1 ? L('Last day today', 'இன்றே கடைசி நாள்') : L(`Last ${m.left} days`, `கடைசி ${m.left} நாட்கள்`));
+function card(m, href = `#movie-${m.id}`, tag = '', sub = '') {
+  const up = m.rel > 0, leaving = leavingSoon(m);
   return `<a class="card" href="${href}">
-    <div class="poster">${poster(m)}${up ? `<span class="pill-date">${fmtDate(releaseDate(m), true)}</span>` : `<span class="pill-rate">${icon('star')}${m.rating.toFixed(1)}</span>`}${m.imax ? '<span class="pill-imax">IMAX</span>' : ''}${tag ? `<span class="pill-tag">${tag}</span>` : ''}</div>
+    <div class="poster">${poster(m)}${up ? `<span class="pill-date">${fmtDate(releaseDate(m), true)}</span>` : m.rating ? `<span class="pill-rate">${icon('star')}${m.rating.toFixed(1)}</span>` : ''}${m.imax ? '<span class="pill-imax">IMAX</span>' : ''}${leaving ? `<span class="pill-leave">${icon('clock')}${leftLabel(m)}</span>` : tag ? `<span class="pill-tag">${tag}</span>` : ''}</div>
     <div class="card-t">${esc(m.title)}</div>
-    <div class="card-m">${esc(m.lang)} · ${esc(m.genres[0])}</div></a>`;
+    <div class="card-m">${sub ? esc(sub) : `${esc(m.lang)} · ${esc((m.genres || [])[0] || '')}`}</div></a>`;
 }
-function row(title, items, sub = '') {
+function row(title, items, sub = '', id = '') {
   if (!items.length) return '';
-  return `<section class="row"><div class="row-h"><h2>${esc(title)}</h2>${sub ? `<small>${esc(sub)}</small>` : ''}</div><div class="rail">${items.join('')}</div></section>`;
+  return `<section class="row"${id ? ` id="${id}"` : ''}><div class="row-h"><h2>${esc(title)}</h2>${sub ? `<small>${esc(sub)}</small>` : ''}</div><div class="rail">${items.join('')}</div></section>`;
 }
 const catCount = (id) => EVENTS.filter((e) => e.cat === id).length;
+// Slides for the home carousel: banners approved by Lumen first, then movies with an uploaded banner, then the top movie
+function slides(city, now) {
+  const out = liveBanners('home', { cityId: city.id }).map((b) => {
+    const mv = b.movieId && movieById(b.movieId);
+    return { img: b.image, title: b.title, sub: b.sub, href: mv ? `#movie-${mv.id}` : b.theatreId ? `#theatre-${b.theatreId}` : '#home', by: b.theatreId ? theatreById(b.theatreId)?.name : '', book: mv && isNowShowing(mv) ? mv.id : '' };
+  });
+  for (const m of now.filter((x) => x.banner)) out.push({ img: m.banner, title: m.title, sub: `${m.lang} · ${m.cert} · ${mins(m.mins)}`, href: `#movie-${m.id}`, book: m.id, trailer: m.trailer ? m.id : '' });
+  return out.slice(0, 6);
+}
 function homeView() {
   const city = CITIES.find((c) => c.id === app.city());
   const pass = (m) => S.langFilter === 'all' || m.lang === S.langFilter || (m.langs || []).includes(S.langFilter);
-  const now = MOVIES.filter((m) => isNowShowing(m) && pass(m)).sort((a, b) => b.rating * Math.log(b.votes) - a.rating * Math.log(a.votes));
+  const now = MOVIES.filter((m) => isNowShowing(m) && pass(m)).sort((a, b) => b.rating * Math.log(b.votes + 2) - a.rating * Math.log(a.votes + 2));
   const soon = MOVIES.filter((m) => !isNowShowing(m) && pass(m)).sort((a, b) => a.rel - b.rel);
+  const fresh = now.filter((m) => m.rel >= -14).sort((a, b) => b.rel - a.rel);
+  const leaving = now.filter(leavingSoon).sort((a, b) => a.left - b.left);
   const hero = now[0] || MOVIES[0];
   const langs = ['all', ...new Set(MOVIES.flatMap((m) => m.langs || [m.lang]))];
   const ths = theatresFor(city.id).sort((a, b) => a.km - b.km);
-  view.innerHTML = `
-    <section class="hero" style="--c1:${hero.c1};--c2:${hero.c2}">
+  const sl = slides(city, now);
+  const todayShows = showsFor({ cityId: city.id, dk: dayKey(today()) });
+  const heroHTML = sl.length ? `<section class="carousel" aria-roledescription="carousel" aria-label="Featured">
+      <div class="car-track" id="carTrack">${sl.map((x, i) => `<article class="slide" aria-label="${i + 1} of ${sl.length}"><img src="${esc(x.img)}" alt="" ${i ? 'loading="lazy"' : 'fetchpriority="high"'} decoding="async">
+        <div class="slide-txt">${x.by ? `<small class="eyebrow">${esc(x.by)}</small>` : ''}<h2>${esc(x.title)}</h2>${x.sub ? `<p>${esc(x.sub)}</p>` : ''}
+        <div class="hero-cta">${x.book ? `<button type="button" class="btn primary" data-book="${x.book}">${icon('ticket')}${t('book')}</button>` : `<a class="btn primary" href="${x.href}">${L('See more', 'மேலும்')}${icon('right')}</a>`}${x.trailer ? `<button type="button" class="btn glass" data-trailer="${x.trailer}">${icon('play')}${L('Trailer', 'டிரெய்லர்')}</button>` : ''}</div></div></article>`).join('')}</div>
+      ${sl.length > 1 ? `<div class="car-dots">${sl.map((_, i) => `<button type="button" data-slide="${i}" aria-label="Slide ${i + 1}" aria-current="${i === 0}"></button>`).join('')}</div>` : ''}</section>`
+    : `<section class="hero" style="--c1:${hero.c1};--c2:${hero.c2}">
       <div class="hero-art">${poster(hero, { big: true })}</div>
       <div class="hero-txt">
         <p class="eyebrow">${t('now')} · ${esc(tx(city))}</p>
@@ -129,37 +155,95 @@ function homeView() {
         <p class="meta">${icon('star')} ${hero.rating.toFixed(1)} · ${esc(hero.lang)} · ${esc(hero.cert)} · ${mins(hero.mins)}</p>
         <p class="about">${esc(hero.about)}</p>
         <div class="hero-cta"><button type="button" class="btn primary" data-book="${hero.id}">${icon('ticket')}${t('book')}</button>
-        <button type="button" class="btn ghost" data-ask="${esc(hero.title)}">${icon('mic')}${t('voice')}</button></div>
+        ${hero.trailer ? `<button type="button" class="btn ghost" data-trailer="${hero.id}">${icon('play')}${L('Trailer', 'டிரெய்லர்')}</button>` : `<button type="button" class="btn ghost" data-ask="${esc(hero.title)}">${icon('mic')}${t('voice')}</button>`}</div>
       </div>
-    </section>
-    <button type="button" class="ask-card" data-ask="">
-      <span class="ask-ic">${icon('mic')}</span>
-      <span class="ask-txt"><b>${t('voice')}</b><small>${t('voice_sub')}</small></span>
-      <span class="ask-eg">“${state.lang === 'ta' ? 'நாளை மாலை Kaalam 2 டிக்கெட்' : '2 tickets for Kaalam tomorrow evening'}”</span>
-    </button>
+    </section>`;
+  view.innerHTML = `
+    ${heroHTML}
+    <div class="locbar"><button type="button" class="loc-btn" id="locBtn">${icon('locate')}<span><b>${LIVE.userLoc ? L('Using your location', 'உங்கள் இருப்பிடம்') : L('Use my current location', 'என் இருப்பிடத்தைப் பயன்படுத்து')}</b><small>${LIVE.userLoc ? L(`Distances from you · ${tx(city)}`, `உங்களிடமிருந்து தூரம் · ${tx(city)}`) : L('See the nearest theatres first', 'அருகிலுள்ள திரையரங்குகள் முதலில்')}</small></span></button>
+      <button type="button" class="ask-card" data-ask=""><span class="ask-ic">${icon('mic')}</span><span class="ask-txt"><b>${t('voice')}</b><small>“${state.lang === 'ta' ? 'நாளை மாலை Kaalam 2 டிக்கெட்' : '2 tickets for Kaalam tomorrow evening'}”</small></span></button></div>
     <div class="filters" role="group" aria-label="Language">${langs.map((l) => `<button type="button" class="fchip" data-lang="${l}" aria-pressed="${S.langFilter === l}">${l === 'all' ? t('all') : esc(l)}</button>`).join('')}</div>
+    ${fresh.length ? `<section class="row"><div class="row-h"><h2>${L('New releases', 'புதிய வெளியீடுகள்')}</h2><small>${L('In cinemas from the last 2 weeks', 'கடந்த 2 வாரங்களில் வெளியானவை')}</small></div>
+      <div class="new-grid">${fresh.slice(0, 4).map((m) => `<article class="nr"><a class="nr-post" href="#movie-${m.id}" aria-label="${esc(m.title)}">${poster(m)}</a><span class="nr-txt"><span class="nr-tag">${m.rel === 0 ? `<i class="dot"></i>` : ''}${esc(daysAgo(m))}</span><a href="#movie-${m.id}"><b>${esc(m.title)}</b></a><small>${esc(m.lang)} · ${esc(m.cert)} · ${mins(m.mins)}</small>
+        <small>${m.rating ? `${icon('star')} ${m.rating.toFixed(1)} · ${compact(m.votes)} ${L('votes', 'வாக்குகள்')}` : esc(m.genres.join(', '))}</small><span class="nr-act"><button type="button" class="btn primary sm" data-book="${m.id}">${t('book')}</button>${m.trailer ? `<button type="button" class="btn ghost sm" data-trailer="${m.id}">${icon('play')}${L('Trailer', 'டிரெய்லர்')}</button>` : ''}</span></span></article>`).join('')}</div></section>` : ''}
+    ${row(L('Last few days in cinemas', 'திரையரங்கில் கடைசி சில நாட்கள்'), leaving.map((m) => card(m)), L('Catch them before they leave', 'போவதற்கு முன் பாருங்கள்'), 'leaving')}
     ${row(t('now'), now.map((m) => card(m)))}
     ${row(t('soon'), soon.map((m) => card(m)))}
     ${row(t('imax'), now.filter((m) => m.imax).map((m) => card(m)))}
     <section class="row"><div class="row-h"><h2>${state.lang === 'ta' ? 'நேரலை நிகழ்வுகள்' : 'Live events'}</h2></div><div class="rail">${EVENT_CATS.map((c) => `<a class="ecard" href="#cat-${c.id}" style="--c1:${c.c1};--c2:${c.c2}"><span class="e-ic">${icon(c.icon)}</span><b>${esc(tx(c))}</b><small>${catCount(c.id)}+ ${state.lang === 'ta' ? 'நிகழ்வுகள்' : 'events'}</small></a>`).join('')}</div></section>
     ${row(t('family'), now.filter((m) => m.genres.some((g) => ['Family', 'Animation', 'Comedy'].includes(g))).map((m) => card(m)))}
     ${row('Premiere', PREMIERES.map((p) => card(p, `#premiere-${p.id}`, 'PREMIERE')), state.lang === 'ta' ? 'வீட்டிலேயே புதுப் படங்கள்' : 'New movies to watch at home')}
-    <section class="row"><div class="row-h"><h2>${t('near')}</h2></div><div class="rail">${ths.map(theatreCard).join('')}</div></section>
-    <a class="for-theatres" href="#partner">${icon('grid')}<span><b>${state.lang === 'ta' ? 'திரையரங்குகளுக்கு' : 'For theatres'}</b><small>${state.lang === 'ta' ? 'உங்கள் திரையின் இருக்கை அமைப்பை அமைக்கவும்' : 'Set up the real seat layout of each screen'}</small></span>${icon('right')}</a>
-    <p class="footnote"><a href="#console">Lumen admin console</a> · ${db.mode === 'server' ? 'Live data' : 'Demo data saved in this browser'}</p>`;
+    <section class="row"><div class="row-h"><h2>${t('near')}</h2><small>${LIVE.userLoc ? L('Nearest first, from your location', 'உங்கள் இருப்பிடத்திலிருந்து') : esc(tx(city))}</small></div>
+      <div class="rail th-rail">${ths.map((th) => theatreCard(th, todayShows.filter((s) => s.theatreId === th.id).length)).join('')}</div></section>
+    <section class="biz">
+      <div class="biz-txt"><small class="eyebrow">${L('For theatres', 'திரையரங்குகளுக்கு')}</small><h2>${L('Sell your seats on Lumen', 'Lumen-இல் உங்கள் இருக்கைகளை விற்கவும்')}</h2>
+        <ul><li>${icon('grid')}${L('Draw your real seat layout. Customers see the view from every seat in 3D.', 'உண்மையான இருக்கை அமைப்பு, ஒவ்வொரு இருக்கையிலிருந்தும் 3D காட்சி.')}</li><li>${icon('clock')}${L('Set your own shows and prices in minutes.', 'காட்சிகள், விலைகளை நீங்களே அமைக்கவும்.')}</li><li>${icon('image')}${L('Upload photos and banners to bring people in.', 'புகைப்படங்கள், பேனர்கள் பதிவேற்றவும்.')}</li><li>${icon('ticket')}${L('Weekly payouts to your bank account.', 'வாரந்தோறும் வங்கிக் கணக்கில் பணம்.')}</li></ul>
+        <div class="hero-cta"><a class="btn primary" href="#register">${L('Register your theatre', 'பதிவு செய்')}${icon('right')}</a><a class="btn glass" href="#login">${icon('lock')}${L('Partner sign in', 'உள்நுழை')}</a></div></div>
+      <div class="biz-art" aria-hidden="true"><svg viewBox="0 0 280 150"><path d="M30 18q110-16 220 0" stroke="#ffc72c" stroke-width="3" fill="none"/><path d="M30 18q110-16 220 0" stroke="#ffc72c" stroke-width="14" opacity=".15" fill="none"/><rect x="18" y="40" width="13" height="11" rx="3" fill="#ffeaa6" opacity="0.35"/><rect x="35" y="40" width="13" height="11" rx="3" fill="#ffeaa6" opacity="1"/><rect x="52" y="40" width="13" height="11" rx="3" fill="#ffeaa6" opacity="1"/><rect x="69" y="40" width="13" height="11" rx="3" fill="#ffeaa6" opacity="1"/><rect x="94" y="40" width="13" height="11" rx="3" fill="#ffeaa6" opacity="1"/><rect x="111" y="40" width="13" height="11" rx="3" fill="#ffeaa6" opacity="0.35"/><rect x="128" y="40" width="13" height="11" rx="3" fill="#ffeaa6" opacity="1"/><rect x="145" y="40" width="13" height="11" rx="3" fill="#ffeaa6" opacity="1"/><rect x="162" y="40" width="13" height="11" rx="3" fill="#ffeaa6" opacity="1"/><rect x="179" y="40" width="13" height="11" rx="3" fill="#ffeaa6" opacity="1"/><rect x="204" y="40" width="13" height="11" rx="3" fill="#ffeaa6" opacity="0.35"/><rect x="221" y="40" width="13" height="11" rx="3" fill="#ffeaa6" opacity="1"/><rect x="238" y="40" width="13" height="11" rx="3" fill="#ffeaa6" opacity="1"/><rect x="255" y="40" width="13" height="11" rx="3" fill="#ffeaa6" opacity="1"/><rect x="18" y="57" width="13" height="11" rx="3" fill="#ffd966" opacity="1"/><rect x="35" y="57" width="13" height="11" rx="3" fill="#ffd966" opacity="0.35"/><rect x="52" y="57" width="13" height="11" rx="3" fill="#ffd966" opacity="1"/><rect x="69" y="57" width="13" height="11" rx="3" fill="#ffd966" opacity="1"/><rect x="94" y="57" width="13" height="11" rx="3" fill="#ffd966" opacity="1"/><rect x="111" y="57" width="13" height="11" rx="3" fill="#ffd966" opacity="1"/><rect x="128" y="57" width="13" height="11" rx="3" fill="#ffd966" opacity="0.35"/><rect x="145" y="57" width="13" height="11" rx="3" fill="#ffd966" opacity="1"/><rect x="162" y="57" width="13" height="11" rx="3" fill="#ffd966" opacity="1"/><rect x="179" y="57" width="13" height="11" rx="3" fill="#ffd966" opacity="1"/><rect x="204" y="57" width="13" height="11" rx="3" fill="#ffd966" opacity="1"/><rect x="221" y="57" width="13" height="11" rx="3" fill="#ffd966" opacity="0.35"/><rect x="238" y="57" width="13" height="11" rx="3" fill="#ffd966" opacity="1"/><rect x="255" y="57" width="13" height="11" rx="3" fill="#ffd966" opacity="1"/><rect x="18" y="74" width="13" height="11" rx="3" fill="#ffd966" opacity="1"/><rect x="35" y="74" width="13" height="11" rx="3" fill="#ffd966" opacity="1"/><rect x="52" y="74" width="13" height="11" rx="3" fill="#ffd966" opacity="0.35"/><rect x="69" y="74" width="13" height="11" rx="3" fill="#ffd966" opacity="1"/><rect x="94" y="74" width="13" height="11" rx="3" fill="#ffd966" opacity="1"/><rect x="111" y="74" width="13" height="11" rx="3" fill="#ffd966" opacity="1"/><rect x="128" y="74" width="13" height="11" rx="3" fill="#ffd966" opacity="1"/><rect x="145" y="74" width="13" height="11" rx="3" fill="#ffd966" opacity="0.35"/><rect x="162" y="74" width="13" height="11" rx="3" fill="#ffd966" opacity="1"/><rect x="179" y="74" width="13" height="11" rx="3" fill="#ffd966" opacity="1"/><rect x="204" y="74" width="13" height="11" rx="3" fill="#ffd966" opacity="1"/><rect x="221" y="74" width="13" height="11" rx="3" fill="#ffd966" opacity="1"/><rect x="238" y="74" width="13" height="11" rx="3" fill="#ffd966" opacity="0.35"/><rect x="255" y="74" width="13" height="11" rx="3" fill="#ffd966" opacity="1"/><rect x="18" y="91" width="13" height="11" rx="3" fill="#ffc72c" opacity="1"/><rect x="35" y="91" width="13" height="11" rx="3" fill="#ffc72c" opacity="1"/><rect x="52" y="91" width="13" height="11" rx="3" fill="#ffc72c" opacity="1"/><rect x="69" y="91" width="13" height="11" rx="3" fill="#ffc72c" opacity="0.35"/><rect x="94" y="91" width="13" height="11" rx="3" fill="#ffc72c" opacity="1"/><rect x="111" y="91" width="13" height="11" rx="3" fill="#ffc72c" opacity="1"/><rect x="128" y="91" width="13" height="11" rx="3" fill="#ffc72c" opacity="1"/><rect x="145" y="91" width="13" height="11" rx="3" fill="#ffc72c" opacity="1"/><rect x="162" y="91" width="13" height="11" rx="3" fill="#ffc72c" opacity="0.35"/><rect x="179" y="91" width="13" height="11" rx="3" fill="#ffc72c" opacity="1"/><rect x="204" y="91" width="13" height="11" rx="3" fill="#ffc72c" opacity="1"/><rect x="221" y="91" width="13" height="11" rx="3" fill="#ffc72c" opacity="1"/><rect x="238" y="91" width="13" height="11" rx="3" fill="#ffc72c" opacity="1"/><rect x="255" y="91" width="13" height="11" rx="3" fill="#ffc72c" opacity="0.35"/><rect x="18" y="108" width="13" height="11" rx="3" fill="#f0b400" opacity="1"/><rect x="35" y="108" width="13" height="11" rx="3" fill="#f0b400" opacity="1"/><rect x="52" y="108" width="13" height="11" rx="3" fill="#f0b400" opacity="1"/><rect x="69" y="108" width="13" height="11" rx="3" fill="#f0b400" opacity="1"/><rect x="94" y="108" width="13" height="11" rx="3" fill="#f0b400" opacity="0.35"/><rect x="111" y="108" width="13" height="11" rx="3" fill="#f0b400" opacity="1"/><rect x="128" y="108" width="13" height="11" rx="3" fill="#f0b400" opacity="1"/><rect x="145" y="108" width="13" height="11" rx="3" fill="#f0b400" opacity="1"/><rect x="162" y="108" width="13" height="11" rx="3" fill="#f0b400" opacity="1"/><rect x="179" y="108" width="13" height="11" rx="3" fill="#f0b400" opacity="0.35"/><rect x="204" y="108" width="13" height="11" rx="3" fill="#f0b400" opacity="1"/><rect x="221" y="108" width="13" height="11" rx="3" fill="#f0b400" opacity="1"/><rect x="238" y="108" width="13" height="11" rx="3" fill="#f0b400" opacity="1"/><rect x="255" y="108" width="13" height="11" rx="3" fill="#f0b400" opacity="1"/><rect x="18" y="125" width="13" height="11" rx="3" fill="#d99a00" opacity="0.35"/><rect x="35" y="125" width="13" height="11" rx="3" fill="#d99a00" opacity="1"/><rect x="52" y="125" width="13" height="11" rx="3" fill="#d99a00" opacity="1"/><rect x="69" y="125" width="13" height="11" rx="3" fill="#d99a00" opacity="1"/><rect x="94" y="125" width="13" height="11" rx="3" fill="#d99a00" opacity="1"/><rect x="111" y="125" width="13" height="11" rx="3" fill="#d99a00" opacity="0.35"/><rect x="128" y="125" width="13" height="11" rx="3" fill="#d99a00" opacity="1"/><rect x="145" y="125" width="13" height="11" rx="3" fill="#d99a00" opacity="1"/><rect x="162" y="125" width="13" height="11" rx="3" fill="#d99a00" opacity="1"/><rect x="179" y="125" width="13" height="11" rx="3" fill="#d99a00" opacity="1"/><rect x="204" y="125" width="13" height="11" rx="3" fill="#d99a00" opacity="0.35"/><rect x="221" y="125" width="13" height="11" rx="3" fill="#d99a00" opacity="1"/><rect x="238" y="125" width="13" height="11" rx="3" fill="#d99a00" opacity="1"/><rect x="255" y="125" width="13" height="11" rx="3" fill="#d99a00" opacity="1"/><circle cx="140" cy="118" r="9" fill="#14161f" stroke="#fff" stroke-width="2"/><path d="M135 118l3.5 3.5 6.5-7" stroke="#ffc72c" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg></div></section>
+    <footer class="foot">
+      <div class="foot-cols">
+        <div><a class="logo" href="#home"><span class="logo-dot"></span>Lumen</a><p class="muted">${L('See the view from your seat before you book.', 'பதிவுக்கு முன் உங்கள் இருக்கையிலிருந்து காட்சியைப் பாருங்கள்.')}</p></div>
+        <div><b>${L('Movies', 'படங்கள்')}</b><a href="#home">${t('now')}</a><a href="#cat-stream">Premiere</a>${CITIES.map((c) => `<button type="button" class="link" data-city="${c.id}">${esc(tx(c))}</button>`).join('')}</div>
+        <div><b>${L('Help', 'உதவி')}</b><a href="#tickets">${t('my_tickets')}</a><button type="button" class="link" data-ask="">${t('voice')}</button></div>
+        <div><b>${L('Business', 'வணிகம்')}</b><a href="#register">${L('List your theatre', 'திரையரங்கைச் சேர்')}</a><a href="#login">${L('Partner & admin sign in', 'பங்குதாரர் / நிர்வாகி உள்நுழைவு')}</a></div>
+      </div>
+      <p class="foot-note">© ${new Date().getFullYear()} Lumen Cinemas · ${L('All movies, theatres and events are fictional demo data. No money is taken.', 'அனைத்தும் மாதிரி தரவு.')} · ${db.mode === 'server' ? L('Live data', 'நேரடி தரவு') : L('Demo data saved in this browser', 'இந்த உலாவியில் சேமிக்கப்பட்ட தரவு')}</p>
+    </footer>`;
   view.querySelector('.filters').addEventListener('click', (e) => { const b = e.target.closest('[data-lang]'); if (!b) return; S.langFilter = b.dataset.lang; homeView(); });
+  view.querySelector('.foot').addEventListener('click', (e) => { const b = e.target.closest('[data-city]'); if (b) { app.setCity(b.dataset.city); route(); } });
+  $('#locBtn').addEventListener('click', locate);
+  bindCarousel();
   if (!S.city) setTimeout(() => openCitySheet(true), 300);
 }
-function theatreCard(th) {
-  return `<a class="tcard" href="#theatre-${th.id}"><span class="tcard-ic">${hallGlyph(th.screens[0].hall)}</span>
-    <b>${esc(th.name)}</b><small>${esc(th.area)} · ${t('km', { k: th.km })}</small><small class="muted">${th.screens.map((s) => esc(tx(HALLS[s.hall]))).join(' · ')}</small></a>`;
+function bindCarousel() {
+  const tr = $('#carTrack'); if (!tr) return;
+  const dots = $$('.car-dots button');
+  let i = 0, timer = 0;
+  const go = (n) => { i = (n + dots.length) % dots.length; tr.scrollTo({ left: tr.clientWidth * i, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); };
+  tr.addEventListener('scroll', () => { const n = Math.round(tr.scrollLeft / tr.clientWidth); if (n !== i) i = n; dots.forEach((d, k) => d.setAttribute('aria-current', String(k === n))); }, { passive: true });
+  dots.forEach((d, k) => d.addEventListener('click', () => { go(k); restart(); }));
+  const restart = () => { clearInterval(timer); if (dots.length > 1 && !matchMedia('(prefers-reduced-motion: reduce)').matches) timer = setInterval(() => { if (!document.hidden) go(i + 1); }, 6000); };
+  tr.addEventListener('pointerdown', () => clearInterval(timer));
+  restart(); onLeave(() => clearInterval(timer));
+}
+// Current location: nearest city + real distances to theatres
+function locate() {
+  if (!navigator.geolocation) { toast(L('Location is not available on this device.', 'இந்த சாதனத்தில் இருப்பிடம் இல்லை.')); return; }
+  const btn = $('#locBtn'); if (btn) btn.classList.add('busy');
+  navigator.geolocation.getCurrentPosition((p) => {
+    const loc = { lat: p.coords.latitude, lng: p.coords.longitude };
+    LIVE.userLoc = loc; store.set('loc', { ...loc, at: Date.now() });
+    const [c, km] = nearestCity(loc);
+    app.setCity(c.id);
+    toast(km > 120 ? L(`Lumen is not in your city yet. Showing the nearest: ${c.en} (${Math.round(km)} km).`, `அருகிலுள்ள நகரம்: ${c.ta}`) : L(`Showing theatres near you in ${c.en}`, `${c.ta}-இல் அருகிலுள்ள திரையரங்குகள்`));
+    route();
+  }, (err) => {
+    if (btn) btn.classList.remove('busy');
+    toast(err.code === 1 ? L('Location permission was blocked. Allow it in your browser settings, or pick a city.', 'இருப்பிட அனுமதி மறுக்கப்பட்டது. நகரத்தைத் தேர்வு செய்யுங்கள்.') : L('Could not find your location. Pick a city instead.', 'இருப்பிடம் கிடைக்கவில்லை.'));
+  }, { enableHighAccuracy: false, timeout: 10000, maximumAge: 600000 });
+}
+function theatreCard(th, nShows = null) {
+  const fmts = [...new Set(th.screens.map((s) => s.fmt))];
+  return `<a class="tcard" href="#theatre-${th.id}"><span class="tcard-img">${th.cover ? `<img src="${esc(th.cover)}" alt="" loading="lazy" decoding="async">` : ticketArt(th.name.split(' ')[0])}<span class="tcard-km">${icon('pin')}${t('km', { k: th.km })}</span></span>
+    <span class="tcard-b"><b>${esc(th.name)}</b><small>${esc(th.area)} · ${th.screens.length} ${th.screens.length > 1 ? L('screens', 'திரைகள்') : L('screen', 'திரை')}</small>
+    <span class="tcard-tags">${fmts.slice(0, 3).map((f) => `<i>${esc(f)}</i>`).join('')}</span>
+    ${nShows != null ? `<small class="tcard-shows">${nShows ? L(`${nShows} shows left today`, `இன்று ${nShows} காட்சிகள்`) : L('No more shows today', 'இன்று காட்சிகள் இல்லை')}</small>` : ''}</span></a>`;
 }
 function hallGlyph(hall) {
   const lay = getLayout(hall);
   const zs = lay.seats.map((s) => s.z);
   const x0 = -lay.W, w = lay.W * 2, z0 = Math.min(...zs) - 2, h = Math.max(...zs) - z0 + 1;
   const dots = lay.seats.filter((_, i) => i % 3 === 0).map((s) => `<circle cx="${((s.x - x0) / w * 60).toFixed(1)}" cy="${(8 + (s.z - z0) / h * 34).toFixed(1)}" r="1.1" fill="${CLASS_META[s.cls].color}"/>`).join('');
-  return `<svg viewBox="0 0 60 44" aria-hidden="true"><path d="M8 4q22-4 44 0" stroke="#ffd9a8" stroke-width="2" fill="none"/>${dots}</svg>`;
+  return `<svg viewBox="0 0 60 44" aria-hidden="true"><path d="M8 4q22-4 44 0" stroke="#ffc72c" stroke-width="2" fill="none"/>${dots}</svg>`;
+}
+// Trailer player (uploaded by Lumen admins)
+function openTrailer(id) {
+  const m = movieById(id); if (!m?.trailer) return;
+  openSheet(`<h2 class="sh-t">${icon('play')}${esc(m.title)}</h2><video class="trailer" src="${esc(m.trailer)}" controls autoplay playsinline preload="metadata"></video>
+    ${isNowShowing(m) ? `<button type="button" class="btn primary wide" data-book="${m.id}">${icon('ticket')}${t('book')}</button>` : ''}`, (sh) => {
+    const v = sh.querySelector('video'); const stop = () => { v.pause(); v.removeAttribute('src'); v.load(); };
+    const obs = new MutationObserver(() => { if ($('#sheet').hidden) { stop(); obs.disconnect(); } }); obs.observe($('#sheet'), { attributes: true, attributeFilter: ['hidden'] });
+  });
 }
 const mins = (n) => t('mins', { h: Math.floor(n / 60), m: n % 60 });
 
@@ -170,17 +254,18 @@ function movieView(id) {
   const more = MOVIES.filter((x) => x.id !== m.id && isNowShowing(x) && x.genres.some((g) => m.genres.includes(g))).slice(0, 8);
   view.innerHTML = `
     <div class="topbar"><a class="iconbtn" href="#home" aria-label="${t('back')}">${icon('back')}</a></div>
-    <section class="mhead" style="--c1:${m.c1};--c2:${m.c2}">
-      <div class="mposter">${poster(m, { big: true })}</div>
+    <section class="mhead${m.banner ? ' has-banner' : ''}" style="--c1:${m.c1};--c2:${m.c2}">${m.banner ? `<img class="mh-bg" src="${esc(m.banner)}" alt="" decoding="async">` : ''}
+      <div class="mposter">${poster(m, { big: true })}${m.trailer ? `<button type="button" class="mp-play" data-trailer="${m.id}" aria-label="Play trailer">${icon('play')}</button>` : ''}</div>
       <div class="minfo">
         <h1>${esc(m.title)}${m.sub ? `<small>${esc(m.sub)}</small>` : ''}</h1>
         ${up ? `<p class="meta">${t('releases', { d: fmtDate(releaseDate(m)) })} · ${t('interested', { n: compact(m.interest) })}</p>`
-             : `<p class="meta"><span class="rate">${icon('star')} ${m.rating.toFixed(1)}/10</span> · ${t('votes', { n: compact(m.votes) })}</p>`}
+             : `<p class="meta">${m.rating ? `<span class="rate">${icon('star')} ${m.rating.toFixed(1)}/10</span> · ${t('votes', { n: compact(m.votes) })} · ` : ''}${esc(daysAgo(m))}</p>`}
+        ${leavingSoon(m) ? `<p class="leave-note">${icon('clock')}<span><b>${leftLabel(m)}</b> ${L('in cinemas. Theatres remove this movie after', 'மட்டும். பிறகு திரையரங்குகளில் இருக்காது:')} ${fmtDate(addDays(today(), m.left - 1))}.</span></p>` : ''}
         <div class="tags">${[...(m.langs || [m.lang]), m.cert, mins(m.mins), ...m.genres, ...(m.imax ? ['IMAX'] : [])].map((x) => `<span class="tag">${esc(x)}</span>`).join('')}</div>
         <p class="about">${esc(m.about)}</p>
         <p class="cast"><b>Cast</b> ${m.cast.map(esc).join(', ')}</p>
         <div class="mh-cta">${up ? `<button type="button" class="btn primary" id="notifyBtn">${icon('bell')}${S.notify.has(m.id) ? t('notified') : t('notify')}</button>`
-             : `<button type="button" class="btn primary" data-book="${m.id}">${icon('ticket')}${t('book')}</button><button type="button" class="btn ghost" data-ask="${esc(m.title)}">${icon('mic')}${t('voice')}</button>`}</div>
+             : `<button type="button" class="btn primary" data-book="${m.id}">${icon('ticket')}${t('book')}</button><button type="button" class="btn ghost" data-ask="${esc(m.title)}">${icon('mic')}${t('voice')}</button>`}${m.trailer ? `<button type="button" class="btn ghost" data-trailer="${m.id}">${icon('play')}${L('Watch trailer', 'டிரெய்லர்')}</button>` : ''}</div>
       </div>
     </section>
     ${row(state.lang === 'ta' ? 'இதுவும் பிடிக்கும்' : 'You might also like', more.map((x) => card(x)))}`;
@@ -277,9 +362,14 @@ function showsView(id) {
 function theatreView(id) {
   const th = theatreById(id); if (!th) return homeView();
   const shows = showsFor({ cityId: th.cityId, dk: dayKey(today()), theatreId: th.id });
+  const canEdit = db.me && (db.me.role === 'admin' || (db.me.theatreIds || []).includes(th.id));
   view.innerHTML = `<div class="topbar"><button class="iconbtn" type="button" id="thBack" aria-label="${t('back')}">${icon('back')}</button></div>
-    <section class="theatre-h"><h1>${esc(th.name)}</h1><p class="meta">${icon('pin')} ${esc(th.area)}, ${esc(tx(CITIES.find((c) => c.id === th.cityId)))} · ${t('km', { k: th.km })}</p>
-    <div class="tags">${th.amen.map((a) => `<span class="tag">${esc(a)}</span>`).join('')}</div></section>
+    <section class="theatre-h"><div class="th-cover">${th.cover ? `<img src="${esc(th.cover)}" alt="${esc(th.name)}" decoding="async">` : ticketArt(th.name)}</div>
+    <div class="th-info"><h1>${esc(th.name)}</h1><p class="meta">${icon('pin')} ${esc(th.area)}, ${esc(tx(CITIES.find((c) => c.id === th.cityId)))} · ${t('km', { k: th.km })}${LIVE.userLoc ? ' ' + L('from you', 'உங்களிடமிருந்து') : ''}</p>
+    <div class="tags">${th.amen.map((a) => `<span class="tag">${esc(a)}</span>`).join('')}</div>
+    <a class="link" href="https://www.google.com/maps/search/?api=1&query=${th.lat.toFixed(5)},${th.lng.toFixed(5)}" target="_blank" rel="noopener">${icon('pin')}${L('Directions', 'வழி')}</a></div></section>
+    ${th.photos.length ? `<div class="ph-rail">${th.photos.map((p) => `<img src="${esc(p)}" alt="" loading="lazy" decoding="async">`).join('')}</div>` : ''}
+    ${liveBanners('theatre', { theatreId: th.id }).concat(liveBanners('home', { theatreId: th.id })).slice(0, 3).map((b) => { const mv = b.movieId && movieById(b.movieId); return `<a class="banner" href="${mv ? '#movie-' + mv.id : '#theatre-' + th.id}"><img src="${esc(b.image)}" alt="" loading="lazy"><div class="banner-txt"><b>${esc(b.title)}</b>${b.sub ? `<small>${esc(b.sub)}</small>` : ''}</div></a>`; }).join('')}
     <h2 class="sec">${t('screens')}</h2>
     <div class="screens">${th.screens.map((sc) => {
       const lay = layoutFor(sc.id, sc.hall);
@@ -287,7 +377,7 @@ function theatreView(id) {
       return `<article class="screen-card"><div class="sc-map">${hallGlyph(sc.hall)}</div>
         <div class="sc-body"><b>${esc(sc.name)} · ${esc(sc.fmt)}</b><small>${esc(tx(hallName(sc.id, sc.hall)))}${customFor(sc.id) ? ' · custom layout' : ''} · ${lay.seats.length} seats · ${lay.rows.length} rows · screen ${lay.screen.w} m wide</small>
         <div class="prices">${Object.entries(pricesFor(sc.id, sc.hall)).map(([k, p]) => `<span><i style="background:${CLASS_META[k].color}"></i>${esc(clsName(k))} ${inr(p)}</span>`).join('')}</div>
-        <span class="mh-cta"><button type="button" class="btn ghost sm" data-explore="${sc.idx}">${icon('cube')}${t('explore')}</button><a class="btn ghost sm" href="#admin-${sc.id}">${icon('grid')}${state.lang === 'ta' ? 'இருக்கை அமைப்பைத் திருத்து' : 'Edit seat layout'}</a></span>
+        <span class="mh-cta"><button type="button" class="btn ghost sm" data-explore="${sc.idx}">${icon('cube')}${t('explore')}</button>${canEdit ? `<a class="btn ghost sm" href="#admin-${sc.id}">${icon('grid')}${state.lang === 'ta' ? 'இருக்கை அமைப்பைத் திருத்து' : 'Edit seat layout'}</a>` : ''}</span>
         ${ss.length ? `<div class="times">${ss.map((s) => `<a class="time avail" href="#show-${s.id}"><b>${hmLabel(s.hm)}</b><small>${esc(movieById(s.movieId).title)}</small></a>`).join('')}</div>` : ''}</div></article>`;
     }).join('')}</div>`;
   $('#thBack').addEventListener('click', () => (history.length > 1 ? history.back() : (location.hash = 'home')));
@@ -828,9 +918,13 @@ function premiereView(id) {
 
 /* ---------- seat layout editor ---------- */
 function adminView(id) {
+  if (!gate(view, panelCtx(), 'staff', 'admin' + (id ? '-' + id : ''))) return;
+  const me = db.me, tid = id && id.replace(/s\d+$/, '');
+  if (me.role !== 'admin' && tid && !(me.theatreIds || []).includes(tid)) { toast('You can only edit your own screens.'); location.hash = 'partner'; return; }
   renderAdmin(view, id, { city: app.city, db, tier: TIER, onLeave, openSheet, closeSheet, refreshForm: null });
 }
-const panelCtx = () => ({ city: app.city, setCity: app.setCity, db, tier: TIER, onLeave, openSheet, closeSheet, route });
+// isCurrent(): false once the person has moved to another screen (async panels check it before drawing)
+const panelCtx = () => { const h = location.hash; return { city: app.city, setCity: app.setCity, db, tier: TIER, onLeave, openSheet, closeSheet, route, isCurrent: () => location.hash === h }; };
 
 /* ---------- sheets: city, search, generic ---------- */
 function openSheet(html, bind) {
@@ -843,8 +937,14 @@ function openSheet(html, bind) {
 function closeSheet() { $('#sheet').hidden = true; if ($('#viewer').hidden && $('#agent').hidden) document.body.classList.remove('lock'); }
 $('#sheet').addEventListener('click', (e) => { if (e.target.id === 'sheet' || e.target.closest('#sheetClose')) closeSheet(); });
 function openCitySheet(first = false) {
-  openSheet(`<h2 class="sh-t">${icon('pin')}${t('city')}</h2><div class="cities">${CITIES.map((c) => `<button type="button" class="city" data-c="${c.id}" aria-pressed="${app.city() === c.id}"><b>${esc(tx(c))}</b><small>${c.areas.slice(0, 3).map(esc).join(' · ')}</small></button>`).join('')}</div>`,
-    (sh) => sh.addEventListener('click', (e) => { const b = e.target.closest('[data-c]'); if (!b) return; app.setCity(b.dataset.c); closeSheet(); route(); }));
+  openSheet(`<h2 class="sh-t">${icon('pin')}${t('city')}</h2><button type="button" class="loc-btn wide" id="locBtn2">${icon('locate')}<span><b>${L('Use my current location', 'என் இருப்பிடத்தைப் பயன்படுத்து')}</b><small>${L('Finds your city and the nearest theatres', 'நகரம் மற்றும் அருகிலுள்ள திரையரங்குகள்')}</small></span></button><div class="cities">${CITIES.map((c) => `<button type="button" class="city" data-c="${c.id}" aria-pressed="${app.city() === c.id}"><b>${esc(tx(c))}</b><small>${c.areas.slice(0, 3).map(esc).join(' · ')}</small></button>`).join('')}</div>`,
+    (sh) => sh.addEventListener('click', (e) => {
+      if (e.target.closest('#locBtn2')) { closeSheet(); locate(); return; }
+      const b = e.target.closest('[data-c]'); if (!b) return;
+      // A city picked by hand: distances are only real when you are in that city
+      if (LIVE.userLoc && nearestCity(LIVE.userLoc)[0].id !== b.dataset.c) { LIVE.userLoc = null; store.set('loc', null); }
+      app.setCity(b.dataset.c); closeSheet(); route();
+    }));
   if (first && !S.city) app.setCity('chennai');
 }
 function openSearch() {
@@ -872,6 +972,8 @@ const agent = createAgent(app);
 $('#cityBtn').addEventListener('click', () => openCitySheet());
 $('#searchBtn').addEventListener('click', openSearch);
 $('#ticketsBtn').addEventListener('click', () => { location.hash = 'tickets'; });
+$('#acctBtn').addEventListener('click', () => openAccount(panelCtx()));
+{ const l = store.get('loc', null); if (l && Date.now() - l.at < 7 * 864e5) LIVE.userLoc = { lat: l.lat, lng: l.lng }; }
 function setThemeBtn() {
   const dark = document.documentElement.dataset.theme === 'dark';
   $('#themeBtn').innerHTML = icon(dark ? 'sun' : 'moon');
@@ -887,7 +989,8 @@ $('#langBtn').addEventListener('click', () => { state.lang = state.lang === 'ta'
 $('#askFab').addEventListener('click', () => agent.open());
 document.addEventListener('click', (e) => {
   const a = e.target.closest('[data-ask]'); if (a) { agent.open(a.dataset.ask || ''); return; }
-  const bk = e.target.closest('[data-book]'); if (bk) openFormatSheet(bk.dataset.book);
+  const tr = e.target.closest('[data-trailer]'); if (tr) { e.preventDefault(); openTrailer(tr.dataset.trailer); return; }
+  const bk = e.target.closest('[data-book]'); if (bk) { e.preventDefault(); openFormatSheet(bk.dataset.book); }
 });
 addEventListener('keydown', (e) => { if (e.key !== 'Escape') return; if (!$('#viewer').hidden) closeViewer(); else if (!$('#sheet').hidden) closeSheet(); else if (agent.isOpen()) agent.close(); });
 addEventListener('hashchange', route);

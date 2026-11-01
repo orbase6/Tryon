@@ -193,7 +193,7 @@ export async function mountHall(host, lay, { movie, booked, selected, tier = 'mi
     });
     scene.add(tm, cm);
   }
-  const col = new THREE.Color(), C_SEAT = new THREE.Color('#284870'), C_BOOK = new THREE.Color('#284870'), C_PICK = new THREE.Color('#2ec4c4'), C_OFF = new THREE.Color('#3a3c42');
+  const col = new THREE.Color(), C_SEAT = new THREE.Color('#284870'), C_BOOK = new THREE.Color('#284870'), C_PICK = new THREE.Color('#ffc72c'), C_OFF = new THREE.Color('#3a3c42');
   const C_REC = new THREE.Color('#2a4366');
   function paintSeats() {
     for (const s of lay.seats) {

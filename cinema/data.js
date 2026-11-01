@@ -12,27 +12,27 @@ export function mulberry32(a) {
 export const hash = (s) => [...String(s)].reduce((a, c) => (Math.imul(a, 31) + c.charCodeAt(0)) >>> 0, 2166136261);
 
 export const CITIES = [
-  { id: 'chennai', en: 'Chennai', ta: 'சென்னை', areas: ['Anna Nagar', 'Vadapalani', 'OMR', 'Velachery'] },
-  { id: 'coimbatore', en: 'Coimbatore', ta: 'கோயம்புத்தூர்', areas: ['RS Puram', 'Gandhipuram', 'Peelamedu', 'Saibaba Colony'] },
-  { id: 'madurai', en: 'Madurai', ta: 'மதுரை', areas: ['KK Nagar', 'Anna Nagar', 'Simmakkal', 'Bypass Road'] },
-  { id: 'bengaluru', en: 'Bengaluru', ta: 'பெங்களூரு', areas: ['Koramangala', 'Indiranagar', 'Whitefield', 'Jayanagar'] },
-  { id: 'kochi', en: 'Kochi', ta: 'கொச்சி', areas: ['Edappally', 'Kakkanad', 'Marine Drive', 'Vyttila'] },
+  { id: 'chennai', en: 'Chennai', ta: 'சென்னை', lat: 13.0827, lng: 80.2707, areas: ['Anna Nagar', 'Vadapalani', 'OMR', 'Velachery'] },
+  { id: 'coimbatore', en: 'Coimbatore', ta: 'கோயம்புத்தூர்', lat: 11.0168, lng: 76.9558, areas: ['RS Puram', 'Gandhipuram', 'Peelamedu', 'Saibaba Colony'] },
+  { id: 'madurai', en: 'Madurai', ta: 'மதுரை', lat: 9.9252, lng: 78.1198, areas: ['KK Nagar', 'Anna Nagar', 'Simmakkal', 'Bypass Road'] },
+  { id: 'bengaluru', en: 'Bengaluru', ta: 'பெங்களூரு', lat: 12.9716, lng: 77.5946, areas: ['Koramangala', 'Indiranagar', 'Whitefield', 'Jayanagar'] },
+  { id: 'kochi', en: 'Kochi', ta: 'கொச்சி', lat: 9.9312, lng: 76.2673, areas: ['Edappally', 'Kakkanad', 'Marine Drive', 'Vyttila'] },
 ];
 
 // Seat classes shared by all halls
 export const CLASS_META = {
-  // Seat classes use shades of the brand teal only (darker = premium)
-  royal: { en: 'Royal Recliner', ta: 'ராயல் ரெக்லைனர்', color: '#0a6464', ink: '#ffffff' },
-  recliner: { en: 'Recliner', ta: 'ரெக்லைனர்', color: '#0a6464', ink: '#ffffff' },
-  couple: { en: 'Couple Sofa', ta: 'ஜோடி சோஃபா', color: '#0a6464', ink: '#ffffff' },
-  balcony: { en: 'Balcony', ta: 'பால்கனி', color: '#11807f', ink: '#ffffff' },
-  premium: { en: 'Premium', ta: 'பிரீமியம்', color: '#11807f', ink: '#ffffff' },
-  prime: { en: 'Prime', ta: 'பிரைம்', color: '#2aa3a3', ink: '#06302f' },
-  back: { en: 'Back stalls', ta: 'பின் வரிசை', color: '#2aa3a3', ink: '#06302f' },
-  standard: { en: 'Standard', ta: 'ஸ்டாண்டர்ட்', color: '#6cc3c3', ink: '#06302f' },
-  classic: { en: 'Classic', ta: 'கிளாசிக்', color: '#6cc3c3', ink: '#06302f' },
-  middle: { en: 'Middle stalls', ta: 'நடு வரிசை', color: '#6cc3c3', ink: '#06302f' },
-  front: { en: 'Front stalls', ta: 'முன் வரிசை', color: '#a8dede', ink: '#06302f' },
+  // Seat classes use shades of the brand yellow only (deeper = premium); text is always ink
+  royal: { en: 'Royal Recliner', ta: 'ராயல் ரெக்லைனர்', color: '#d99a00', ink: '#14161f' },
+  recliner: { en: 'Recliner', ta: 'ரெக்லைனர்', color: '#d99a00', ink: '#14161f' },
+  couple: { en: 'Couple Sofa', ta: 'ஜோடி சோஃபா', color: '#d99a00', ink: '#14161f' },
+  balcony: { en: 'Balcony', ta: 'பால்கனி', color: '#f0b400', ink: '#14161f' },
+  premium: { en: 'Premium', ta: 'பிரீமியம்', color: '#f0b400', ink: '#14161f' },
+  prime: { en: 'Prime', ta: 'பிரைம்', color: '#ffc72c', ink: '#14161f' },
+  back: { en: 'Back stalls', ta: 'பின் வரிசை', color: '#ffc72c', ink: '#14161f' },
+  standard: { en: 'Standard', ta: 'ஸ்டாண்டர்ட்', color: '#ffd966', ink: '#14161f' },
+  classic: { en: 'Classic', ta: 'கிளாசிக்', color: '#ffd966', ink: '#14161f' },
+  middle: { en: 'Middle stalls', ta: 'நடு வரிசை', color: '#ffd966', ink: '#14161f' },
+  front: { en: 'Front stalls', ta: 'முன் வரிசை', color: '#ffeaa6', ink: '#14161f' },
 };
 
 // Theatre chains (fictional). Each screen uses one hall type from layout.js
@@ -47,35 +47,58 @@ export const CHAINS = [
     screens: [{ name: 'Main screen', hall: 'single', fmt: '2D' }] },
 ];
 
+const HALL_AMEN = { classic: 'Dolby Atmos', imax: 'IMAX laser', lounge: 'All recliners', single: 'Big balcony', multiplex: 'Food court' };
 export function theatresFor(cityId, { all = false } = {}) {
   const ci = CITIES.findIndex((c) => c.id === cityId);
   const city = CITIES[ci];
   if (!city) return [];
+  const live = (id) => LIVE.theatres[id] || {};
+  const place = (id) => { const r = mulberry32(hash(id + 'geo')); return { lat: city.lat + (r() - 0.5) * 0.14, lng: city.lng + (r() - 0.5) * 0.14 }; };
   const list = CHAINS.map((ch, i) => {
+    const id = `c${ci}t${i}`;
     const r = mulberry32(hash(city.id + ch.key));
     return {
-      id: `c${ci}t${i}`, cityId: city.id, chain: ch.key, name: ch.name, area: city.areas[i % city.areas.length],
-      km: Math.round((1.2 + r() * 9) * 10) / 10, amen: ch.amen,
-      screens: ch.screens.map((s, si) => ({ ...s, idx: si, id: `c${ci}t${i}s${si}` })),
-      status: LIVE.theatres[`c${ci}t${i}`]?.status || 'active',
-      kycStatus: LIVE.theatres[`c${ci}t${i}`]?.kycStatus || 'not_submitted',
+      id, cityId: city.id, chain: ch.key, name: ch.name, area: city.areas[i % city.areas.length],
+      demoKm: Math.round((1.2 + r() * 9) * 10) / 10, amen: ch.amen, ...place(id),
+      screens: ch.screens.map((s, si) => ({ ...s, idx: si, id: `${id}s${si}` })),
     };
   });
+  // Theatres that joined through partner registration (approved by a Lumen admin)
+  for (const nt of LIVE.newTheatres.filter((x) => x.cityId === city.id)) {
+    list.push({ id: nt.id, cityId: city.id, chain: 'partner', name: nt.name, area: nt.area, demoKm: 4 + (hash(nt.id) % 50) / 10, ...place(nt.id),
+      amen: [...new Set(nt.screens.map((s) => HALL_AMEN[s.hall]).filter(Boolean)), 'Parking'],
+      screens: nt.screens.map((s, si) => ({ name: s.name, hall: s.hall, fmt: s.fmt, idx: si, id: `${nt.id}s${si}` })), isNew: true });
+  }
+  for (const th of list) {
+    th.status = live(th.id).status || 'active';
+    th.kycStatus = live(th.id).kycStatus || 'not_submitted';
+    const md = LIVE.media.theatres[th.id] || {};
+    th.cover = md.cover || null; th.photos = md.photos || [];
+    th.km = LIVE.userLoc ? Math.round(kmBetween(LIVE.userLoc, th) * 10) / 10 : th.demoKm;
+  }
   return all ? list : list.filter((t) => t.status !== 'suspended');
 }
 export function theatreById(id) {
   const m = /^c(\d+)t(\d+)$/.exec(id); if (!m) return null;
   const city = CITIES[+m[1]]; if (!city) return null;
-  return theatresFor(city.id, { all: true })[+m[2]] || null;
+  return theatresFor(city.id, { all: true }).find((t) => t.id === id) || null;
 }
+// Distance on the earth's surface in km
+export function kmBetween(a, b) {
+  const R = 6371, rad = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * rad, dLng = (b.lng - a.lng) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+export const nearestCity = (loc) => CITIES.map((c) => [c, kmBetween(loc, c)]).sort((a, b) => a[1] - b[1])[0];
 
 // Movies (fictional titles). rel = days from today (negative = already released)
 export const MOVIES = [
-  { id: 'kaalam', title: 'Kaalam', sub: 'The Last Monsoon', lang: 'Tamil', genres: ['Drama', 'Thriller'], cert: 'U/A 13+', mins: 161, rating: 8.7, votes: 41200, rel: -9, imax: false,
+  { id: 'kaalam', title: 'Kaalam', sub: 'The Last Monsoon', lang: 'Tamil', genres: ['Drama', 'Thriller'], cert: 'U/A 13+', mins: 161, rating: 8.7, votes: 41200, rel: -9, run: 40, imax: false,
     c1: '#2a1640', c2: '#c86a2a', motif: 'sun', cast: ['Arun Vel', 'Meera Das', 'Karthik Raj'], about: 'A boatman races a cyclone to bring his daughter home, and finds the village he left behind.' },
-  { id: 'neonkadal', title: 'Neon Kadal', sub: '', lang: 'Tamil', genres: ['Action', 'Crime'], cert: 'A', mins: 148, rating: 8.1, votes: 28600, rel: -16, imax: true,
+  { id: 'neonkadal', title: 'Neon Kadal', sub: '', lang: 'Tamil', genres: ['Action', 'Crime'], cert: 'A', mins: 148, rating: 8.1, votes: 28600, rel: -16, run: 45, imax: true,
     c1: '#04203a', c2: '#ff2e88', motif: 'waves', cast: ['Vijay Kumar R', 'Nila S', 'Bose'], about: 'A night-shift fisherman stumbles into a smuggling war on the neon-lit Chennai coast.' },
-  { id: 'paati', title: "Paati's Kitchen", sub: '', lang: 'Tamil', genres: ['Family', 'Comedy'], cert: 'U', mins: 125, rating: 9.0, votes: 52800, rel: -23, imax: false,
+  { id: 'paati', title: "Paati's Kitchen", sub: '', lang: 'Tamil', genres: ['Family', 'Comedy'], cert: 'U', mins: 125, rating: 9.0, votes: 52800, rel: -23, run: 25, imax: false,
     c1: '#5a2b0c', c2: '#ffb347', motif: 'leaf', cast: ['Kamala Devi', 'Surya Prakash', 'Baby Anu'], about: 'Three cousins try to save their grandmother\'s 60-year-old mess from a highway project.' },
   { id: 'orbit9', title: 'Orbit Nine', sub: '', lang: 'English', genres: ['Sci-Fi', 'Adventure'], cert: 'U/A 13+', mins: 154, rating: 8.4, votes: 96100, rel: -4, imax: true, langs: ['English', 'Tamil', 'Hindi'],
     c1: '#030712', c2: '#4fe3d6', motif: 'stars', cast: ['Elena Ward', 'Sam Okafor', 'Ivo Lind'], about: 'A repair crew on a dying space station has nine orbits to bring everyone home.' },
@@ -85,7 +108,7 @@ export const MOVIES = [
     c1: '#0c3b2e', c2: '#f2c14e', motif: 'arc', cast: ['Anjali Menon', 'Fahad N', 'Siddiq'], about: 'Two strangers keep meeting at the same Kochi ferry, one monsoon at a time.' },
   { id: 'lastferry', title: 'The Last Ferry', sub: '', lang: 'English', genres: ['Thriller', 'Mystery'], cert: 'A', mins: 119, rating: 7.9, votes: 44300, rel: -6, imax: false,
     c1: '#0d1117', c2: '#7d8da8', motif: 'moon', cast: ['Hugo Marsh', 'Priya Lal', 'Jon Aria'], about: 'Eleven passengers. One storm. Someone on board is not who they claim to be.' },
-  { id: 'kanna', title: 'Little Kanna', sub: '', lang: 'Tamil', genres: ['Animation', 'Family'], cert: 'U', mins: 102, rating: 8.5, votes: 12700, rel: -18, imax: false,
+  { id: 'kanna', title: 'Little Kanna', sub: '', lang: 'Tamil', genres: ['Animation', 'Family'], cert: 'U', mins: 102, rating: 8.5, votes: 12700, rel: -18, run: 21, imax: false,
     c1: '#1e3a8a', c2: '#ffd166', motif: 'stars', cast: ['Voice: Aditi', 'Voice: Ramesh'], about: 'A cowherd boy and a talking peacock set out to find the lost flute of their village.' },
   { id: 'dhool', title: 'Dhool Express', sub: '', lang: 'Hindi', genres: ['Comedy', 'Road'], cert: 'U/A 7+', mins: 131, rating: 7.2, votes: 21500, rel: -11, imax: false,
     c1: '#3b1d00', c2: '#ffd400', motif: 'road', cast: ['Raj Malhotra', 'Simran K', 'Pankaj T'], about: 'A wedding band misses its train and has 48 hours to cross three states.' },
@@ -101,25 +124,51 @@ export const MOVIES = [
   { id: 'starfall', title: 'Starfall', sub: '', lang: 'English', genres: ['Sci-Fi', 'Action'], cert: 'U/A 13+', mins: 149, rating: 0, votes: 0, rel: 19, imax: true, interest: 251000,
     c1: '#020617', c2: '#60a5fa', motif: 'stars', cast: ['Mira Holt', 'Dev Anand R'], about: 'When the moon cracks, a pilot has eight days to land the pieces.' },
 ];
-export const movieById = (id) => MOVIES.find((m) => m.id === id) || BASE_MOVIES.find((m) => m.id === id) || null;
+export const movieById = (id) => MOVIES.find((m) => m.id === id) || ALL_MOVIES.find((m) => m.id === id) || BASE_MOVIES.find((m) => m.id === id) || null;
 const BASE_MOVIES = MOVIES.slice();
 export const baseMovies = () => BASE_MOVIES;
 
 /* ---------- live data from the partner panel and admin console (see db.js) ---------- */
-export const LIVE = { theatres: {}, schedule: {}, demoCrowd: true };
+export const LIVE = { theatres: {}, schedule: {}, demoCrowd: true, newTheatres: [], media: { movies: {}, theatres: {} }, banners: [], userLoc: null };
 const dayDiff = (iso) => { const [y, m, d] = iso.split('-').map(Number); return Math.round((new Date(y, m - 1, d, 12) - today()) / 86400000); };
+const ALL_MOVIES = [];
 export function applyLive(st) {
   LIVE.theatres = st.theatres || {};
   LIVE.schedule = st.schedule || {};
+  LIVE.newTheatres = Array.isArray(st.newTheatres) ? st.newTheatres : [];
+  LIVE.media = { movies: {}, theatres: {}, ...(st.media || {}) };
+  LIVE.banners = Array.isArray(st.banners) ? st.banners : [];
   const f = st.fees || {};
   CONV_FEE = f.conv ?? 18; GST = f.gst ?? 0.18; HOLD_MINUTES = f.holdMinutes ?? 5;
   FEE_PER_TICKET = Math.round(CONV_FEE * (1 + GST));
   LIVE.demoCrowd = f.demoCrowd ?? true;
   const hidden = new Set(st.hiddenMovies || []);
-  const custom = (st.movies || []).map((m) => ({ rating: 0, votes: 0, interest: 0, sub: '', motif: 'stars', cast: [], ...m, custom: true, rel: m.release ? dayDiff(m.release) : 0 }));
-  MOVIES.splice(0, MOVIES.length, ...BASE_MOVIES.filter((m) => !hidden.has(m.id)), ...custom);
+  const custom = (st.movies || []).map((m) => ({ rating: 0, votes: 0, interest: 0, sub: '', motif: 'stars', cast: [], genres: [], ...m, custom: true, rel: m.release ? dayDiff(m.release) : 0 }));
+  const all = [...BASE_MOVIES.filter((m) => !hidden.has(m.id)).map((m) => ({ ...m })), ...custom];
+  for (const m of all) {
+    const md = LIVE.media.movies[m.id] || {};
+    m.poster = md.poster || null; m.banner = md.banner || null; m.trailer = md.trailer || null;
+    // Days left in cinemas, counting today (1 = today is the last day). null = no end date yet.
+    const last = md.lastDay || m.lastDay;
+    m.left = last ? dayDiff(last) + 1 : m.run ? m.rel + m.run : null;
+  }
+  ALL_MOVIES.splice(0, ALL_MOVIES.length, ...all);
+  // A movie leaves the app's listings the day after its last day in cinemas
+  MOVIES.splice(0, MOVIES.length, ...all.filter((m) => m.left == null || m.left > 0));
   if (Array.isArray(st.offers)) OFFERS.splice(0, OFFERS.length, ...st.offers.filter((o) => o.active !== false));
   else OFFERS.splice(0, OFFERS.length, ...BASE_OFFERS);
+}
+// "Last 3 days" badge: true when the movie leaves cinemas within 3 days
+export const leavingSoon = (m) => m.rel <= 0 && m.left != null && m.left > 0 && m.left <= 3;
+// Shows only up to the movie's last day
+const playsOn = (m, dk) => m.left == null || dayDiff(`${dk.slice(0, 4)}-${dk.slice(4, 6)}-${dk.slice(6, 8)}`) < m.left;
+// Banners users see right now on a placement ('home' or 'theatre'), newest first
+export function liveBanners(placement, { cityId = null, theatreId = null } = {}) {
+  const now = Date.now(), D = 864e5;
+  return LIVE.banners.filter((b) => b.status === 'live' && b.placement === placement
+    && (!b.from || Date.parse(b.from) <= now) && (!b.to || Date.parse(b.to) + D > now)
+    && (!theatreId || b.theatreId === theatreId)
+    && (!cityId || !b.theatreId || b.theatreId.startsWith('c' + CITIES.findIndex((c) => c.id === cityId) + 't')));
 }
 export const isNowShowing = (m) => m.rel <= 0;
 
@@ -137,7 +186,7 @@ const SLOTS_LOUNGE = ['1030', '1400', '1730', '2100'];
 // Which two movies each screen plays on a given day. Every movie in cinemas
 // gets at least one regular screen in every city, every day.
 function lineup(screen, cityIdx, dk) {
-  const showing = MOVIES.filter(isNowShowing);
+  const showing = MOVIES.filter((m) => isNowShowing(m) && playsOn(m, dk));
   if (!showing.length) return [];
   if (screen.hall === 'imax') {
     const big = showing.filter((m) => m.imax);
@@ -157,7 +206,7 @@ function lineup(screen, cityIdx, dk) {
 // The shows on one screen for one day: the partner's own schedule if they set one, else the default lineup
 export function screenDay(screen, cityIdx, dk) {
   const sch = LIVE.schedule[screen.id];
-  if (sch && sch.custom) return (sch.shows || []).filter((x) => x.dk === dk).map((x) => ({ hm: x.hm, movie: movieById(x.movieId) })).filter((x) => x.movie).sort((a, b) => a.hm.localeCompare(b.hm));
+  if (sch && sch.custom) return (sch.shows || []).filter((x) => x.dk === dk).map((x) => ({ hm: x.hm, movie: movieById(x.movieId) })).filter((x) => x.movie && playsOn(x.movie, dk)).sort((a, b) => a.hm.localeCompare(b.hm));
   const pair = lineup(screen, cityIdx, dk); if (!pair.length) return [];
   const slots = screen.hall === 'lounge' ? SLOTS_LOUNGE : SLOTS;
   return slots.map((hm, i) => ({ hm, movie: pair[i % 2] }));
@@ -206,20 +255,20 @@ export function hmLabel(hm) {
 export function partOfDay(hm) { const h = +hm.slice(0, 2); return h < 12 ? 'morning' : h < 16 ? 'afternoon' : h < 20 ? 'evening' : 'night'; }
 
 export const SNACKS = [
-  { id: 'pop', en: 'Salted popcorn (L)', ta: 'உப்பு பாப்கார்ன் (L)', price: 280, tone: 'var(--teal-soft)' },
-  { id: 'car', en: 'Caramel popcorn (L)', ta: 'கேரமல் பாப்கார்ன் (L)', price: 320, tone: 'var(--red-soft)' },
-  { id: 'nac', en: 'Nachos with cheese', ta: 'சீஸ் நாச்சோஸ்', price: 260, tone: 'var(--teal-soft)' },
-  { id: 'cof', en: 'Cold coffee', ta: 'குளிர் காபி', price: 220, tone: 'var(--red-soft)' },
-  { id: 'cmb', en: 'Combo · 2 popcorn + 2 drinks', ta: 'காம்போ · 2 பாப்கார்ன் + 2 பானம்', price: 690, tone: 'var(--teal-soft)' },
+  { id: 'pop', en: 'Salted popcorn (L)', ta: 'உப்பு பாப்கார்ன் (L)', price: 280, tone: 'var(--yel-soft)' },
+  { id: 'car', en: 'Caramel popcorn (L)', ta: 'கேரமல் பாப்கார்ன் (L)', price: 320, tone: 'var(--card-2)' },
+  { id: 'nac', en: 'Nachos with cheese', ta: 'சீஸ் நாச்சோஸ்', price: 260, tone: 'var(--yel-soft)' },
+  { id: 'cof', en: 'Cold coffee', ta: 'குளிர் காபி', price: 220, tone: 'var(--card-2)' },
+  { id: 'cmb', en: 'Combo · 2 popcorn + 2 drinks', ta: 'காம்போ · 2 பாப்கார்ன் + 2 பானம்', price: 690, tone: 'var(--yel-soft)' },
 ];
 export let FEE_PER_TICKET = 21; // fee + GST per ticket, shown all-in
 
 // Events, plays, sports and activities (fictional). day = days from today.
 export const EVENT_CATS = [
-  { id: 'events', en: 'Events', ta: 'நிகழ்வுகள்', icon: 'spark', c1: '#14161f', c2: '#e5414f' },
-  { id: 'plays', en: 'Plays', ta: 'நாடகங்கள்', icon: 'ticket', c1: '#14161f', c2: '#0e9f9f' },
-  { id: 'sports', en: 'Sports', ta: 'விளையாட்டு', icon: 'star', c1: '#e5414f', c2: '#14161f' },
-  { id: 'activities', en: 'Activities', ta: 'செயல்பாடுகள்', icon: 'pin', c1: '#0e9f9f', c2: '#14161f' },
+  { id: 'events', en: 'Events', ta: 'நிகழ்வுகள்', icon: 'spark', c1: '#14161f', c2: '#ffc72c' },
+  { id: 'plays', en: 'Plays', ta: 'நாடகங்கள்', icon: 'ticket', c1: '#14161f', c2: '#d99a00' },
+  { id: 'sports', en: 'Sports', ta: 'விளையாட்டு', icon: 'star', c1: '#2a2c36', c2: '#ffc72c' },
+  { id: 'activities', en: 'Activities', ta: 'செயல்பாடுகள்', icon: 'pin', c1: '#2a2c36', c2: '#d99a00' },
 ];
 export const EVENTS = [
   { id: 'kadalbeats', cat: 'events', title: 'Kadal Beats Live', kind: 'Concert', day: 6, hm: '1900', venue: 'Island Grounds', mins: 180, c1: '#2a0b3d', c2: '#ff2e88', about: 'An evening of indie Tamil and fusion bands by the sea.', tiers: [['Fan pit', 2499], ['Gold', 1499], ['Silver', 799]] },
