@@ -19,7 +19,10 @@ node server.js            # Node 18+, nothing to install   (Windows: double-clic
 1. Copy `settings.example.env` to `settings.env` and fill it in (this file is never committed).
 2. `ADMIN_EMAIL` / `ADMIN_PASSWORD` create the first Lumen admin the first time the server starts. Without them, the server prints a random admin password once in its window.
 3. For OTP emails with Gmail: turn on 2-Step Verification, create an **App password** at https://myaccount.google.com/apppasswords, and put it in `SMTP_PASS` with `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465`. Without SMTP settings, the codes are printed in the server window (fine for testing).
-4. Sign in at `/#login` (same page for admins and partners). Change the admin password from **Account → Change password**.
+4. Sign in at `/#login` (same page for admins and partners).
+5. Forgot a password, or want a ready partner account? Close the server window, then run
+   `node set-password.js admin <email> "<password>"` or
+   `node set-password.js partner <email> "<password>" c0t0` (c0t0 = the theatre they run). Change the admin password from **Account → Change password**.
 
 - **With `node server.js`** every device shares the same data (saved in `cinema/data/db.json`): bookings, real 5-minute seat holds, schedules, prices, layouts, KYC, movies, offers and fees.
 - **Without the server** (any static host, e.g. `python -m http.server 5500`), the app still works and keeps data in that browser only.
