@@ -41,9 +41,9 @@ const DAY = 864e5;
 
 /* ---------------- storage ---------------- */
 let db = { movies: [], hiddenMovies: [], schedule: {}, theatres: {}, offers: null, fees: null, layouts: {}, prices: {}, bookings: [],
-  users: [], sessions: {}, newTheatres: [], media: { movies: {}, theatres: {} }, banners: [], payments: [], billing: null, settings: {}, messages: [], cities: [] };
+  users: [], sessions: {}, newTheatres: [], media: { movies: {}, theatres: {} }, banners: [], payments: [], billing: null, settings: {}, messages: [], cities: [], mediaRequests: [] };
 try { db = { ...db, ...JSON.parse(fs.readFileSync(DB_FILE, 'utf8')) }; } catch (e) { /* first run */ }
-db.payments ||= []; db.settings ||= {}; db.messages ||= []; db.cities ||= [];
+db.payments ||= []; db.mediaRequests ||= []; db.settings ||= {}; db.messages ||= []; db.cities ||= [];
 db.media ||= { movies: {}, theatres: {} }; db.media.movies ||= {}; db.media.theatres ||= {};
 let saveTimer = null;
 function save() {
@@ -84,6 +84,8 @@ const plans = () => {
 // Keys and passwords entered in Admin → Settings win over settings.env / environment variables
 const cfg = (group, key, env) => (db.settings[group] && db.settings[group][key]) || (env ? process.env[env] : '') || '';
 const RZP = () => { const id = cfg('razorpay', 'keyId', 'RAZORPAY_KEY_ID'), secret = cfg('razorpay', 'keySecret', 'RAZORPAY_KEY_SECRET'); return id && secret ? { id, secret } : null; };
+const BASE_MOVIE_IDS = ['kaalam', 'neonkadal', 'paati', 'orbit9', 'rajarumble', 'mazhavil', 'lastferry', 'kanna', 'dhool', 'silentvalley', 'agniparavai', 'moonlit', 'kuyil', 'starfall'];
+const movieExists = (id) => BASE_MOVIE_IDS.includes(id) || (db.movies || []).some((x) => x.id === id);
 const BASE_CITIES = ['chennai', 'coimbatore', 'madurai', 'bengaluru', 'kochi'];
 const cityIndex = (id) => { const i = BASE_CITIES.indexOf(id); if (i >= 0) return i; const j = db.cities.findIndex((c) => c.id === id); return j >= 0 ? BASE_CITIES.length + j : -1; };
 // Show start time from a show id (…d20261102h1845), in India time
@@ -303,6 +305,7 @@ function stateFor(u, client) {
     .map((b) => (mine(b) ? b : { ...b, contact: b.contact ? { email: b.contact.email.replace(/^(.).*(@.*)$/, '$1•••$2'), phone: b.contact.phone ? '•••••' + b.contact.phone.slice(-4) : '' } : null }));
   return { movies: db.movies, hiddenMovies: db.hiddenMovies, schedule: db.schedule, theatres, offers: db.offers, fees: db.fees, layouts: db.layouts, prices: db.prices,
     newTheatres: db.newTheatres, media: db.media, banners, bookings, me: publicUser(u), billing: db.billing, lapsed: lapsedTheatres(),
+    mediaRequests: u && u.role === 'admin' ? db.mediaRequests.filter((x) => x.status === 'pending') : u && u.role === 'partner' ? db.mediaRequests.filter((x) => x.by === u.id).slice(0, 30) : [],
     payments: u && u.role !== 'customer' ? db.payments.filter((x) => u.role === 'admin' || x.userId === ownerOf(u).id) : [], cities: db.cities,
     contact: { email: cfg('contact', 'email'), phone: cfg('contact', 'phone'), company: cfg('contact', 'company'), address: cfg('contact', 'address') },
     kycPublic: Object.fromEntries(Object.entries(db.theatres).filter(([, t]) => t.kycStatus === 'verified' && t.kyc).map(([id, t]) => [id, { legal: t.kyc.legal, gstin: t.kyc.gstin }])) };
@@ -641,7 +644,21 @@ async function apiRoute(req, res, url) {
   }
   if ((mm = /^media\/(movie|theatre)\/([\w-]+)$/.exec(p)) && m === 'PUT') {
     if (!need('staff')) return;
-    if (mm[1] === 'movie' && u.role !== 'admin') return send(res, 403, { error: 'Only Lumen admins can change movie media.' });
+    if (mm[1] === 'movie' && u.role !== 'admin') {
+      // Theatre partners: poster / trailer / banner for a movie. Empty slots go live at once;
+      // replacing an existing one becomes a request that a Lumen admin approves.
+      if (!movieExists(mm[2])) return send(res, 404, { error: 'No such movie.' });
+      const v = await body(req), live = {}, asked = [];
+      const cur = db.media.movies[mm[2]] || {};
+      for (const k of ['poster', 'trailer', 'banner']) {
+        if (!(k in v) || typeof v[k] !== 'string' || !/^uploads\/[\w.-]+$/.test(v[k])) continue;
+        if (!cur[k]) live[k] = v[k];
+        else { db.mediaRequests = db.mediaRequests.filter((r) => !(r.movieId === mm[2] && r.field === k && r.by === u.id && r.status === 'pending'));
+          db.mediaRequests.unshift({ id: uid(6), movieId: mm[2], field: k, url: v[k], by: u.id, byName: u.name, theatreId: (u.theatreIds || [])[0] || null, status: 'pending', at: Date.now() }); asked.push(k); }
+      }
+      db.media.movies[mm[2]] = { ...cur, ...live, ...(Object.keys(live).length ? { addedBy: u.id } : {}) }; save();
+      return send(res, 200, { ok: true, media: db.media.movies[mm[2]], live: Object.keys(live), pending: asked });
+    }
     if (mm[1] === 'theatre' && !ownsTheatre(u, mm[2])) return send(res, 403, { error: 'Not your theatre.' });
     const v = await body(req), clean = {};
     for (const k of ['poster', 'banner', 'trailer', 'cover']) if (k in v) clean[k] = typeof v[k] === 'string' && /^uploads\/[\w.-]+$/.test(v[k]) ? v[k] : null;
@@ -650,6 +667,15 @@ async function apiRoute(req, res, url) {
     const bag = mm[1] === 'movie' ? db.media.movies : db.media.theatres;
     bag[mm[2]] = { ...(bag[mm[2]] || {}), ...clean }; save();
     return send(res, 200, { ok: true, media: bag[mm[2]] });
+  }
+  if ((mm = /^admin\/media-requests\/([\w-]+)$/.exec(p)) && m === 'POST') {
+    if (!need('admin')) return;
+    const r = db.mediaRequests.find((x) => x.id === mm[1]); if (!r || r.status !== 'pending') return send(res, 404, { error: 'No such request.' });
+    const { action } = await body(req);
+    if (action === 'approve') { db.media.movies[r.movieId] = { ...(db.media.movies[r.movieId] || {}), [r.field]: r.url }; r.status = 'approved'; }
+    else if (action === 'reject') r.status = 'rejected';
+    else return send(res, 400, { error: 'Unknown action' });
+    save(); return send(res, 200, { ok: true, media: db.media.movies[r.movieId] });
   }
   if (p === 'banners' && m === 'POST') {
     if (!need('staff')) return;

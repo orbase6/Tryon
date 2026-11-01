@@ -202,6 +202,36 @@ function overview(host, th, ctx) {
 /* ---------- show scheduler ---------- */
 function shows(host, th, ctx) {
   let si = 0, dk = dayKey(today()), pick = null;
+  // Poster and trailer of the movie picked in "Add shows"
+  function drawMedia() {
+    const box = $('#aMedia'); if (!box) return;
+    const id = $('#aMovie')?.dataset.value, mv = movieById(id); if (!mv) { box.innerHTML = ''; return; }
+    const viewer = ctx.db.me?.staffRole === 'viewer';
+    const reqs = (ctx.db.state.mediaRequests || []).filter((r) => r.movieId === id && r.status === 'pending');
+    const wait = (k) => (reqs.some((r) => r.field === k) ? '<small class="mv-wait">New one sent to Lumen for approval</small>' : '');
+    box.innerHTML = `<span class="mv-h">${icon('image')}Poster & trailer for ${esc(mv.title)}</span>
+      <div class="mv-row"><div class="mv-post">${poster(mv)}</div>
+        <div class="mv-info"><b>${mv.poster ? 'Poster added' : 'No poster yet'}</b><small>${mv.poster ? 'Uploading a new one asks Lumen to approve it.' : 'Your upload goes live for this movie right away.'}</small>${wait('poster')}
+          ${viewer ? '' : `<label class="btn ghost sm">${icon('upload')}${mv.poster ? 'Replace poster' : 'Upload poster'}<input type="file" data-mf="poster" accept="image/jpeg,image/png,image/webp" hidden></label>`}</div></div>
+      <div class="mv-row"><div class="mv-post mv-vid">${mv.trailer ? `<video src="${esc(mv.trailer)}" muted playsinline preload="metadata"></video>` : icon('film')}</div>
+        <div class="mv-info"><b>${mv.trailer ? 'Trailer added' : 'No trailer yet'}</b><small>MP4 or WebM, up to 150 MB.</small>${wait('trailer')}
+          <span class="acts">${mv.trailer ? `<button type="button" class="btn ghost sm" data-trailer="${mv.id}">${icon('play')}Watch</button>` : ''}${viewer ? '' : `<label class="btn ghost sm">${icon('upload')}${mv.trailer ? 'Replace trailer' : 'Upload trailer'}<input type="file" data-mf="trailer" accept="video/mp4,video/webm" hidden></label>`}</span></div></div>
+      <span class="up-bar" id="aBar" hidden><i></i></span>`;
+    box.querySelectorAll('[data-mf]').forEach((inp) => inp.addEventListener('change', async (e) => {
+      const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+      const field = inp.dataset.mf, vid = field === 'trailer', max = vid ? 150e6 : 6e6;
+      if (!(vid ? /^video\/(mp4|webm)$/ : /^image\/(jpeg|png|webp)$/).test(f.type)) { toast(vid ? 'Choose an MP4 or WebM video.' : 'Choose a JPG, PNG or WebP image.'); return; }
+      if (f.size > max) { toast(`That file is too big (max ${max / 1e6} MB).`); return; }
+      const bar = $('#aBar'), fill = bar.querySelector('i'); bar.hidden = false;
+      try {
+        const url = await ctx.db.upload(f, (p) => { fill.style.width = Math.round(p * 100) + '%'; });
+        const r = await ctx.db.setMedia('movie', id, { [field]: url });
+        await ctx.db.refresh();
+        toast(r.pending?.length ? 'Sent to Lumen. The new one shows after approval.' : `${vid ? 'Trailer' : 'Poster'} added. Customers see it now.`);
+        render();
+      } catch (err) { toast(err.message); bar.hidden = true; }
+    }));
+  }
   const sch = () => ctx.db.state.schedule;
   const ci = CITIES.findIndex((c) => c.id === th.cityId);
   function render() {
@@ -220,6 +250,7 @@ function shows(host, th, ctx) {
         <section class="panel"><h2>Add shows</h2>
           <form id="addForm" class="pt-form" novalidate>
             <div class="af"><span>Movie</span>${moviePicker('aMovie', movies, pick, (m) => `${m.lang} · ${m.mins} min${isNowShowing(m) ? (m.left != null && m.left <= 3 ? ` · leaves cinemas in ${m.left} day${m.left > 1 ? 's' : ''}` : '') : ' · releases ' + fmtDate(releaseDate(m))}`)}</div>
+            <div id="aMedia" class="mv-media"></div>
             <label class="af"><span>Start times (24-hour, comma separated)</span><input class="input" id="aTimes" value="10:00, 13:30, 17:15, 21:00" autocomplete="off"></label>
             <div class="af-grid"><label class="af"><span>From</span><span class="dd"><select id="aFrom">${days.map((d) => `<option value="${dayKey(d)}" ${dayKey(d) === dk ? 'selected' : ''}>${fmtDate(d)}</option>`).join('')}</select></span></label>
               <label class="af"><span>For how many days</span><span class="af-in"><input type="number" id="aDays" min="1" max="14" value="7"><small>days</small></span></label></div>
@@ -229,7 +260,8 @@ function shows(host, th, ctx) {
           </form>
         </section>
       </div>`;
-    bindMoviePicker(host, 'aMovie', (id) => { pick = id; });
+    bindMoviePicker(host, 'aMovie', (id) => { pick = id; drawMedia(); });
+    drawMedia();
     host.querySelector('.filters').addEventListener('click', (e) => { const b = e.target.closest('[data-sc]'); if (b) { si = +b.dataset.sc; render(); } });
     host.querySelector('.days').addEventListener('click', (e) => { const b = e.target.closest('[data-dk]'); if (b) { dk = b.dataset.dk; render(); } });
     $('#ownSch')?.addEventListener('click', async () => {

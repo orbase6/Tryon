@@ -26,7 +26,7 @@ export async function consoleView(view, tab, ctx) {
   msgCache = msgs || [];
   if (!ctx.isCurrent()) return;
   const ptPending = usersCache.filter((x) => x.status === 'pending').length;
-  const cnt = { theatres: pending, banners: bnPending, partners: ptPending, messages: msgCache.filter((x) => x.status === 'open').length };
+  const cnt = { movies: (ctx.db.state.mediaRequests || []).length, theatres: pending, banners: bnPending, partners: ptPending, messages: msgCache.filter((x) => x.status === 'open').length };
   view.innerHTML = `
     <div class="topbar"><a class="iconbtn" href="#home" aria-label="Back">${icon('back')}</a><div class="sb-t"><b>Lumen admin console</b><small>${esc(u.name)} · ${esc(u.email)}</small></div>
       <button type="button" class="btn ghost sm" id="acct">${icon('user')}<span class="hide-sm">Account</span></button></div>
@@ -169,12 +169,20 @@ function movies(host, ctx) {
       return rel + (lm.left != null ? `<small>${lm.left <= 0 ? 'Left cinemas' : lm.left <= 3 ? `Leaving in ${lm.left} day${lm.left > 1 ? 's' : ''}` : `Last day in ${lm.left} days`}</small>` : '') + `<small>${[md.poster && 'Poster', md.banner && 'Banner', md.trailer && 'Trailer'].filter(Boolean).join(' · ') || 'No uploads yet'}</small>`; })()}</td>
     <td>${hidden.has(m.id) ? chip('Hidden', 'bad') : chip(isCustom ? 'Added by Lumen' : 'Live', 'ok')}</td>
     <td class="acts"><button type="button" class="btn ghost sm" data-media="${m.id}">${icon('image')}Media</button>${isCustom ? `<button type="button" class="btn ghost sm" data-edit="${m.id}">Edit</button><button type="button" class="btn ghost sm danger" data-delm="${m.id}">Remove</button>` : `<button type="button" class="btn ghost sm" data-hide="${m.id}">${hidden.has(m.id) ? 'Show' : 'Hide'}</button>`}</td></tr>`;
-  host.innerHTML = `<div class="sec-row"><h2 class="sec">Movie catalogue</h2><button type="button" class="btn primary sm" id="addMovie">${icon('plus')}Add movie</button></div>
+  const reqs = ctx.db.state.mediaRequests || [];
+  host.innerHTML = `${reqs.length ? `<h2 class="sec">New posters & trailers from theatres <i class="cnt">${reqs.length}</i></h2><div class="bn-list">${reqs.map((r) => { const mv = movieById(r.movieId), cur = ctx.db.state.media.movies[r.movieId]?.[r.field];
+      const show = (u) => (r.field === 'trailer' ? `<video src="${esc(u)}" controls muted playsinline preload="metadata"></video>` : `<img src="${esc(u)}" alt="">`);
+      return `<article class="bn-item"><b>${esc(mv?.title || r.movieId)} · ${r.field}</b><small class="muted">From ${esc(r.byName || 'a partner')}${r.theatreId ? ' · ' + esc(theatreById(r.theatreId)?.name || r.theatreId) : ''} · ${new Date(r.at).toLocaleDateString('en-IN')}</small>
+        <div class="req-cmp"><figure><figcaption>Now</figcaption>${cur ? show(cur) : '—'}</figure><figure><figcaption>New</figcaption>${show(r.url)}</figure></div>
+        <span class="acts"><button type="button" class="btn primary sm" data-mr="approve" data-id="${r.id}">${icon('check')}Use the new one</button><button type="button" class="btn ghost sm danger" data-mr="reject" data-id="${r.id}">Keep current</button></span></article>`; }).join('')}</div>` : ''}
+    <div class="sec-row"><h2 class="sec">Movie catalogue</h2><button type="button" class="btn primary sm" id="addMovie">${icon('plus')}Add movie</button></div>
     <div class="tbl-wrap"><table class="tbl"><thead><tr><th></th><th>Movie</th><th>Release</th><th>Status</th><th></th></tr></thead><tbody>
     ${custom.map((m) => row(m, true)).join('')}${baseMovies().map((m) => row(m, false)).join('')}</tbody></table></div>
     <p class="hint">Hidden movies disappear from the app. Theatres can schedule any movie that is in cinemas or releases within 14 days.</p>`;
   $('#addMovie').addEventListener('click', () => movieForm(null, ctx));
-  host.addEventListener('click', (e) => {
+  host.addEventListener('click', async (e) => {
+    const mr = e.target.closest('[data-mr]');
+    if (mr) { try { await ctx.db.mediaRequest(mr.dataset.id, mr.dataset.mr); await ctx.db.refresh(); toast(mr.dataset.mr === 'approve' ? 'Updated. Customers see the new one now.' : 'Kept the current one.'); ctx.route(); } catch (x) { toast(x.message); } return; }
     const md = e.target.closest('[data-media]'); if (md) { mediaSheet(md.dataset.media, ctx); return; }
     const h = e.target.closest('[data-hide]'), ed = e.target.closest('[data-edit]'), d = e.target.closest('[data-delm]');
     if (h) { const id = h.dataset.hide; const next = hidden.has(id) ? [...hidden].filter((x) => x !== id) : [...hidden, id]; save(ctx, 'hiddenMovies', next, hidden.has(id) ? 'Movie is visible again.' : 'Movie hidden from the app.'); }

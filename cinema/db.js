@@ -79,6 +79,7 @@ export const db = {
   settings() { return api('admin/settings'); },
   saveSettings(v) { return api('admin/settings', { method: 'PUT', body: v }); },
   testSetting(kind, to) { return api('admin/settings/test', { method: 'POST', body: { kind, to } }); },
+  mediaRequest(id, action) { return api('admin/media-requests/' + id, { method: 'POST', body: { action } }); },
   startTrial(payToken) { return api('billing/trial', { method: 'POST', body: { payToken } }); },
 
   /* ---- partner plans (server only) ---- */
@@ -104,7 +105,7 @@ export const db = {
   async setMedia(kind, id, fields) {
     const r = await api(`media/${kind}/${id}`, { method: 'PUT', body: fields });
     const bag = kind === 'movie' ? this.state.media.movies : this.state.media.theatres;
-    bag[id] = r.media; apply(this.state); return r.media;
+    bag[id] = r.media; apply(this.state); return { ...r.media, pending: r.pending || [] };
   },
   async addBanner(b) { const r = await api('banners', { method: 'POST', body: b }); this.state.banners.unshift(r.banner); apply(this.state); return r.banner; },
   async reviewBanner(id, status, note) { const r = await api('banners/' + id, { method: 'PUT', body: { status, note } }); Object.assign(this.state.banners.find((x) => x.id === id) || {}, r.banner); apply(this.state); return r.banner; },
