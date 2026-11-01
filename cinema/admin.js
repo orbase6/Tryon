@@ -1,7 +1,7 @@
 // Seat layout editor for theatre staff. Build a screen's layout from a seat grid
 // plus a few measurements, see it live in 2D and 3D, and save it for that screen.
 import { CLASS_META, MOVIES, theatresFor, theatreById } from './data.js';
-import { HALLS, buildLayout, specOfHall, rowsToText, textToRows, parsePlan, REC_CLASSES, setCustomLayouts, customFor, scoreColor } from './layout.js';
+import { HALLS, buildLayout, specOfHall, rowsToText, textToRows, parsePlan, REC_CLASSES, customFor, scoreColor } from './layout.js';
 import { mountMap } from './map2d.js';
 import { icon, esc, inr, $, $$, toast, clsName, state, tx } from './ui.js';
 
@@ -26,7 +26,7 @@ function cellsToPlan(blocks, rec) {
 }
 
 export function adminView(view, screenId, ctx) {
-  const ths = theatresFor(ctx.city());
+  const ths = theatresFor(ctx.city(), { all: true });
   const all = ths.flatMap((th) => th.screens.map((sc) => ({ th, sc })));
   if (!screenId || !theatreById(screenId.replace(/s\d+$/, ''))) screenId = all[0].sc.id;
   const th = theatreById(screenId.replace(/s\d+$/, ''));
@@ -137,8 +137,9 @@ export function adminView(view, screenId, ctx) {
   $('#ad3d').addEventListener('click', () => { show3d = !show3d; if (show3d) mount3d(); else { hall?.dispose(); hall = null; $('#ad3dBox').hidden = true; } });
   $('#adScreen').addEventListener('change', (e) => { location.hash = 'admin-' + e.target.value; });
   $('#adTpl').addEventListener('change', (e) => { const name = spec.name; spec = specOfHall(e.target.value); spec.name = name; ctx.refreshForm(); });
-  $('#adReset').addEventListener('click', () => {
-    delete ctx.S.layouts[screenId]; ctx.store.set('layouts', ctx.S.layouts); setCustomLayouts(ctx.S.layouts);
+  $('#adReset').addEventListener('click', async () => {
+    const L = { ...ctx.db.state.layouts }; delete L[screenId];
+    try { await ctx.db.put('layouts', L); } catch (e) { toast('Could not save. Check the connection and try again.'); return; }
     toast('This screen is back on its template layout.'); adminView(view, screenId, ctx);
   });
   $('#gGo').addEventListener('click', () => {
@@ -151,10 +152,10 @@ export function adminView(view, screenId, ctx) {
     letters.forEach((l) => lines.push({ r: l, cls: $('#gC').value, plan: blocks.join('_') }));
     rowsEl.value = rowsToText(lines); rebuild();
   });
-  $('#adSave').addEventListener('click', () => {
+  $('#adSave').addEventListener('click', async () => {
     rebuild(); if (errors.length) return;
-    ctx.S.layouts[screenId] = JSON.parse(JSON.stringify(spec));
-    ctx.store.set('layouts', ctx.S.layouts); setCustomLayouts(ctx.S.layouts);
+    try { await ctx.db.put('layouts', { ...ctx.db.state.layouts, [screenId]: JSON.parse(JSON.stringify(spec)) }); }
+    catch (e) { toast('Could not save. Check the connection and try again.'); return; }
     toast(`Saved. ${sc.name} at ${th.name} now uses this layout for every show.`);
     const o = $('#adScreen').selectedOptions[0]; if (o && !o.textContent.endsWith('✓')) o.textContent += ' ✓';
   });

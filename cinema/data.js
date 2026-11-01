@@ -47,22 +47,26 @@ export const CHAINS = [
     screens: [{ name: 'Main screen', hall: 'single', fmt: '2D' }] },
 ];
 
-export function theatresFor(cityId) {
+export function theatresFor(cityId, { all = false } = {}) {
   const ci = CITIES.findIndex((c) => c.id === cityId);
   const city = CITIES[ci];
-  return CHAINS.map((ch, i) => {
+  if (!city) return [];
+  const list = CHAINS.map((ch, i) => {
     const r = mulberry32(hash(city.id + ch.key));
     return {
       id: `c${ci}t${i}`, cityId: city.id, chain: ch.key, name: ch.name, area: city.areas[i % city.areas.length],
       km: Math.round((1.2 + r() * 9) * 10) / 10, amen: ch.amen,
       screens: ch.screens.map((s, si) => ({ ...s, idx: si, id: `c${ci}t${i}s${si}` })),
+      status: LIVE.theatres[`c${ci}t${i}`]?.status || 'active',
+      kycStatus: LIVE.theatres[`c${ci}t${i}`]?.kycStatus || 'not_submitted',
     };
   });
+  return all ? list : list.filter((t) => t.status !== 'suspended');
 }
 export function theatreById(id) {
   const m = /^c(\d+)t(\d+)$/.exec(id); if (!m) return null;
   const city = CITIES[+m[1]]; if (!city) return null;
-  return theatresFor(city.id)[+m[2]] || null;
+  return theatresFor(city.id, { all: true })[+m[2]] || null;
 }
 
 // Movies (fictional titles). rel = days from today (negative = already released)
@@ -97,7 +101,26 @@ export const MOVIES = [
   { id: 'starfall', title: 'Starfall', sub: '', lang: 'English', genres: ['Sci-Fi', 'Action'], cert: 'U/A 13+', mins: 149, rating: 0, votes: 0, rel: 19, imax: true, interest: 251000,
     c1: '#020617', c2: '#60a5fa', motif: 'stars', cast: ['Mira Holt', 'Dev Anand R'], about: 'When the moon cracks, a pilot has eight days to land the pieces.' },
 ];
-export const movieById = (id) => MOVIES.find((m) => m.id === id);
+export const movieById = (id) => MOVIES.find((m) => m.id === id) || BASE_MOVIES.find((m) => m.id === id) || null;
+const BASE_MOVIES = MOVIES.slice();
+export const baseMovies = () => BASE_MOVIES;
+
+/* ---------- live data from the partner panel and admin console (see db.js) ---------- */
+export const LIVE = { theatres: {}, schedule: {}, demoCrowd: true };
+const dayDiff = (iso) => { const [y, m, d] = iso.split('-').map(Number); return Math.round((new Date(y, m - 1, d, 12) - today()) / 86400000); };
+export function applyLive(st) {
+  LIVE.theatres = st.theatres || {};
+  LIVE.schedule = st.schedule || {};
+  const f = st.fees || {};
+  CONV_FEE = f.conv ?? 18; GST = f.gst ?? 0.18; HOLD_MINUTES = f.holdMinutes ?? 5;
+  FEE_PER_TICKET = Math.round(CONV_FEE * (1 + GST));
+  LIVE.demoCrowd = f.demoCrowd ?? true;
+  const hidden = new Set(st.hiddenMovies || []);
+  const custom = (st.movies || []).map((m) => ({ rating: 0, votes: 0, interest: 0, sub: '', motif: 'stars', cast: [], ...m, custom: true, rel: m.release ? dayDiff(m.release) : 0 }));
+  MOVIES.splice(0, MOVIES.length, ...BASE_MOVIES.filter((m) => !hidden.has(m.id)), ...custom);
+  if (Array.isArray(st.offers)) OFFERS.splice(0, OFFERS.length, ...st.offers.filter((o) => o.active !== false));
+  else OFFERS.splice(0, OFFERS.length, ...BASE_OFFERS);
+}
 export const isNowShowing = (m) => m.rel <= 0;
 
 // Dates
@@ -107,15 +130,18 @@ export function fromKey(k) { return new Date(+k.slice(0, 4), +k.slice(4, 6) - 1,
 export const today = () => { const d = new Date(); d.setHours(12, 0, 0, 0); return d; };
 export function releaseDate(m) { return addDays(today(), m.rel); }
 
-const SLOTS = ['0930', '1215', '1500', '1830', '2140'];
-const SLOTS_LOUNGE = ['1100', '1445', '1900', '2230'];
+// Shows are 3h15 apart: longest movie (2h47) + 20 minutes to clean the hall fits between them
+const SLOTS = ['0900', '1215', '1530', '1845', '2200'];
+const SLOTS_LOUNGE = ['1030', '1400', '1730', '2100'];
 
 // Which two movies each screen plays on a given day. Every movie in cinemas
 // gets at least one regular screen in every city, every day.
 function lineup(screen, cityIdx, dk) {
   const showing = MOVIES.filter(isNowShowing);
+  if (!showing.length) return [];
   if (screen.hall === 'imax') {
     const big = showing.filter((m) => m.imax);
+    if (!big.length) return [showing[0], showing[1 % showing.length]];
     const r = mulberry32(hash(screen.id + dk));
     const i = Math.floor(r() * big.length);
     return [big[i], big[(i + 1) % big.length]];
@@ -125,8 +151,16 @@ function lineup(screen, cityIdx, dk) {
   const order = [...showing];
   const r = mulberry32(hash(city.id + dk));
   for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
-  const k = regular.findIndex((s) => s.id === screen.id);
+  const k = Math.max(0, regular.findIndex((s) => s.id === screen.id));
   return [order[(2 * k) % order.length], order[(2 * k + 1) % order.length]];
+}
+// The shows on one screen for one day: the partner's own schedule if they set one, else the default lineup
+export function screenDay(screen, cityIdx, dk) {
+  const sch = LIVE.schedule[screen.id];
+  if (sch && sch.custom) return (sch.shows || []).filter((x) => x.dk === dk).map((x) => ({ hm: x.hm, movie: movieById(x.movieId) })).filter((x) => x.movie).sort((a, b) => a.hm.localeCompare(b.hm));
+  const pair = lineup(screen, cityIdx, dk); if (!pair.length) return [];
+  const slots = screen.hall === 'lounge' ? SLOTS_LOUNGE : SLOTS;
+  return slots.map((hm, i) => ({ hm, movie: pair[i % 2] }));
 }
 
 export function showsFor({ cityId, dk, movieId = null, theatreId = null }) {
@@ -136,11 +170,9 @@ export function showsFor({ cityId, dk, movieId = null, theatreId = null }) {
   for (const th of theatresFor(cityId)) {
     if (theatreId && th.id !== theatreId) continue;
     for (const sc of th.screens) {
-      const [a, b] = lineup(sc, ci, dk);
-      const slots = sc.hall === 'lounge' ? SLOTS_LOUNGE : SLOTS;
-      slots.forEach((hm, i) => {
-        const mv = i % 2 === 0 ? a : b;
+      screenDay(sc, ci, dk).forEach(({ hm, movie: mv }) => {
         if (movieId && mv.id !== movieId) return;
+        if (!isNowShowing(mv) && fromKey(dk) < releaseDate(mv)) return;
         const d = fromKey(dk); d.setHours(+hm.slice(0, 2), +hm.slice(2), 0, 0);
         if (d < now) return; // already started
         out.push(makeShow(th, sc, mv, dk, hm));
@@ -154,7 +186,7 @@ function makeShow(th, sc, mv, dk, hm) {
   const r = mulberry32(hash(id));
   const prime = +hm >= 1800 ? 0.25 : 0;
   const weekend = [0, 6].includes(fromKey(dk).getDay()) ? 0.2 : 0;
-  const occ = Math.min(0.92, 0.12 + r() * 0.5 + prime + weekend);
+  const occ = LIVE.demoCrowd ? Math.min(0.92, 0.12 + r() * 0.5 + prime + weekend) : 0;
   const langs = mv.langs || [mv.lang];
   const lang = langs[Math.floor(r() * langs.length)];
   return { id, theatreId: th.id, screenIdx: sc.idx, hall: sc.hall, fmt: sc.fmt, movieId: mv.id, dk, hm, occ, lang };
@@ -164,10 +196,8 @@ export function showById(id) {
   const th = theatreById(m[1]); if (!th) return null;
   const sc = th.screens[+m[2]]; if (!sc) return null;
   const ci = CITIES.findIndex((c) => c.id === th.cityId);
-  const [a, b] = lineup(sc, ci, m[3]);
-  const slots = sc.hall === 'lounge' ? SLOTS_LOUNGE : SLOTS;
-  const i = slots.indexOf(m[4]); if (i < 0) return null;
-  return makeShow(th, sc, i % 2 === 0 ? a : b, m[3], m[4]);
+  const x = screenDay(sc, ci, m[3]).find((y) => y.hm === m[4]);
+  return x ? makeShow(th, sc, x.movie, m[3], m[4]) : null;
 }
 export function hmLabel(hm) {
   let h = +hm.slice(0, 2); const mm = hm.slice(2); const ap = h >= 12 ? 'PM' : 'AM';
@@ -182,7 +212,7 @@ export const SNACKS = [
   { id: 'cof', en: 'Cold coffee', ta: 'குளிர் காபி', price: 220, tone: 'var(--red-soft)' },
   { id: 'cmb', en: 'Combo · 2 popcorn + 2 drinks', ta: 'காம்போ · 2 பாப்கார்ன் + 2 பானம்', price: 690, tone: 'var(--teal-soft)' },
 ];
-export const FEE_PER_TICKET = 21; // ₹18 fee + 18% GST, shown all-in
+export let FEE_PER_TICKET = 21; // fee + GST per ticket, shown all-in
 
 // Events, plays, sports and activities (fictional). day = days from today.
 export const EVENT_CATS = [
@@ -213,12 +243,26 @@ export const PREMIERES = [
 export const premiereById = (id) => PREMIERES.find((p) => p.id === id);
 
 // Offers that can be applied at payment
-export const OFFERS = [
+const BASE_OFFERS = [
   { code: 'FIRST50', en: '50% off up to ₹150 on your first booking', pct: 50, max: 150, min: 0 },
   { code: 'MORNING20', en: '20% off morning shows (before 12 PM)', pct: 20, max: 200, min: 0, morning: true },
   { code: 'UPI40', en: 'Flat ₹40 off when you pay by UPI', flat: 40, min: 300, upi: true },
   { code: 'GROUP4', en: '₹100 off when you book 4 or more seats', flat: 100, min: 0, minSeats: 4 },
 ];
-export const CONV_FEE = 18;   // base convenience fee per ticket
-export const GST = 0.18;      // tax on the fee
-export const HOLD_MINUTES = 5;
+export const OFFERS = BASE_OFFERS.slice();
+export let CONV_FEE = 18;   // base convenience fee per ticket (admin can change)
+export let GST = 0.18;      // tax on the fee
+export let HOLD_MINUTES = 5;
+export const baseOffers = () => BASE_OFFERS;
+// Money for one booking: what the theatre gets and what the platform keeps
+export function bookingMoney(b) {
+  const ticket = b.ticketAmount || 0;
+  const food = Object.entries(b.snacks || {}).reduce((a, [k, n]) => a + (SNACKS.find((s) => s.id === k)?.price || 0) * n, 0);
+  const fees = b.fees || 0, gst = fees - fees / (1 + GST), convNet = fees - gst;
+  const discount = b.discount || 0, donation = b.donate ? b.qty || 0 : 0;
+  const refund = b.cancelled ? b.refund || 0 : 0;
+  // On cancellation the customer gets `refund` back from the ticket price and food is refunded in full;
+  // the theatre keeps the rest of the ticket price, the platform keeps its fee.
+  const theatre = b.cancelled ? ticket - refund : ticket + food;
+  return { ticket, food, fees, gst, convNet, discount, donation, refund, theatre: Math.max(0, theatre), platform: convNet - discount };
+}

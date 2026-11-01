@@ -233,12 +233,19 @@ export function createAgent(app) {
       return { label: `${hmLabel(s.hm)} · ${th.name.split(' ')[0]} ${th.area}`, run: () => propose(s) };
     });
   }
-  function confirm() {
+  async function confirm() {
     if (!proposal) return;
-    const b = app.book(proposal.show, proposal.seats.map((s) => s.id), {}, 'UPI');
-    bubble(say.booked(proposal), 'bot');
-    chips([{ label: L() === 'ta' ? 'டிக்கெட் பார்' : 'Open ticket', icon: 'ticket', primary: true, run: () => { close(); app.go('ticket-' + b.id); } }, { label: L() === 'ta' ? 'இன்னொன்று' : 'Book another', run: () => { ctx = {}; proposal = null; bubble(say.hello()); chips(movieChips()); } }]);
-    proposal = null; ctx = {};
+    const pr = proposal; proposal = null;
+    let b = null;
+    try { b = await app.book(pr.show, pr.seats.map((s) => s.id), {}, 'UPI'); } catch (e) { b = undefined; }
+    if (!b) {
+      bubble(b === undefined ? (L() === 'ta' ? 'இணைப்பு இல்லை. மீண்டும் முயற்சிக்கவும்.' : 'I could not reach the server. Please try again.')
+        : (L() === 'ta' ? 'அந்த இருக்கைகள் இப்போதுதான் எடுக்கப்பட்டன. வேறு இருக்கைகளைத் தேடுகிறேன்.' : 'Someone just took those seats. Let me find others.'));
+      if (b === null) propose(pr.show); return;
+    }
+    bubble(say.booked(pr), 'bot');
+    chips([{ label: L() === 'ta' ? 'டிக்கெட் பார்' : 'Open ticket', icon: 'ticket', primary: true, run: () => { close(); app.go('ticket-' + b.id); } }, { label: L() === 'ta' ? 'இன்னொன்று' : 'Book another', run: () => { ctx = {}; bubble(say.hello()); chips(movieChips()); } }]);
+    ctx = {};
   }
   async function handle(text, fromChip = false) {
     if (!text.trim()) return;

@@ -63,7 +63,12 @@ export function setCustomLayouts(obj) { custom.clear(); for (const [k, v] of Obj
 export const customFor = (screenId) => custom.get(screenId) || null;
 const screenIdOf = (show) => `${show.theatreId}s${show.screenIdx}`;
 export function layoutFor(screenId, hall) { const c = custom.get(screenId); return c ? buildLayout(c, 'custom:' + screenId + ':' + hash(JSON.stringify(c))) : getLayout(hall); }
-export function pricesFor(screenId, hall) { const c = custom.get(screenId); return (c && c.prices) || HALLS[hall].prices; }
+const priceOv = new Map();
+export function setPriceOverrides(obj) { priceOv.clear(); for (const [k, v] of Object.entries(obj || {})) priceOv.set(k, v); }
+export function pricesFor(screenId, hall) {
+  const c = custom.get(screenId), base = (c && c.prices) || HALLS[hall].prices, ov = priceOv.get(screenId) || {};
+  const out = {}; for (const k of Object.keys(base)) out[k] = ov[k] ?? base[k]; return out;
+}
 export const layoutOf = (show) => layoutFor(screenIdOf(show), show.hall);
 export const pricesOf = (show) => pricesFor(screenIdOf(show), show.hall);
 export const hallName = (screenId, hall) => (custom.get(screenId)?.name ? { en: custom.get(screenId).name, ta: custom.get(screenId).name } : HALLS[hall]);

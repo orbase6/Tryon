@@ -9,6 +9,9 @@ import { mountMap } from './map2d.js';
 import { t, tx, state, icon, inr, esc, clsName, poster, $, $$, toast, fmtDate, compact, deviceTier } from './ui.js';
 import { createAgent } from './agent.js';
 import { adminView as renderAdmin } from './admin.js';
+import { partnerView as renderPartner } from './partner.js';
+import { consoleView as renderConsole } from './console.js';
+import { db } from './db.js';
 
 const TIER = deviceTier();
 const view = $('#view');
@@ -18,7 +21,6 @@ const store = {
 };
 const S = {
   city: store.get('city', null),
-  bookings: store.get('bookings', []),
   notify: new Set(store.get('notify', [])),
   favs: new Set(store.get('favs', [])),
   contact: store.get('contact', { email: '', phone: '' }),
@@ -26,8 +28,7 @@ const S = {
   langFilter: 'all',
 };
 const holds = new Map(); // showId -> { seats, until }
-S.layouts = store.get('layouts', {});
-setCustomLayouts(S.layouts);
+Object.defineProperty(S, 'bookings', { get: () => db.myBookings() });
 let cleanup = [];
 const onLeave = (fn) => cleanup.push(fn);
 const money = (v) => '₹' + (Math.round(v * 100) / 100).toLocaleString('en-IN', { minimumFractionDigits: v % 1 ? 2 : 0, maximumFractionDigits: 2 });
@@ -40,14 +41,16 @@ const app = {
   city: () => S.city || 'chennai',
   setCity(id) { S.city = id; store.set('city', id); renderHeader(); },
   setNotify(id, on) { on ? S.notify.add(id) : S.notify.delete(id); store.set('notify', [...S.notify]); },
-  mySeats(showId) { return S.bookings.filter((b) => b.showId === showId && !b.cancelled).flatMap((b) => b.seats || []); },
-  heldSeats(showId) { const h = holds.get(showId); return h && h.until > Date.now() ? h.seats : []; },
-  hold(showId, seats) { holds.set(showId, { seats, until: Date.now() + HOLD_MINUTES * 60000 }); return holds.get(showId); },
-  release(showId) { holds.delete(showId); },
-  // Quick booking used by the voice assistant (pays with UPI, no snacks)
-  book(show, seats, snacks = {}, method = 'UPI') {
+  // seats sold for a show (every booking this app knows about)
+  mySeats(showId) { return db.allBookings().filter((b) => b.showId === showId && !b.cancelled).flatMap((b) => b.seats || []); },
+  async hold(showId, seats) { const r = await db.hold(showId, seats, HOLD_MINUTES); if (r.ok) holds.set(showId, { seats, until: r.until || Date.now() + HOLD_MINUTES * 60000 }); return r; },
+  release(showId) { holds.delete(showId); db.release(showId); },
+  // Quick booking used by the voice assistant (holds, then pays with UPI, no snacks)
+  async book(show, seats, snacks = {}, method = 'UPI') {
+    const h = await app.hold(show.id, seats); if (!h.ok) return null;
     const order = movieOrder(show, seats, snacks);
-    return saveBooking(order, method, priceOrder(order, { donate: false, offer: null }).total);
+    const b = await saveBooking(order, method, priceOrder(order, { donate: false, offer: null }).total);
+    app.release(show.id); return b;
   },
   go(route) { location.hash = route; },
   openSeats(showId, seatIds) { pendingPick = { showId, seatIds }; agent.close(); location.hash = 'show-' + showId; },
@@ -91,6 +94,8 @@ function route() {
   if ((m = /^premiere-([a-z0-9]+)$/.exec(h))) return premiereView(m[1]);
   if (h === 'admin') return adminView(null);
   if ((m = /^admin-(c\d+t\d+s\d+)$/.exec(h))) return adminView(m[1]);
+  if ((m = /^partner(?:-(c\d+t\d+))?(?:-([a-z]+))?$/.exec(h))) return renderPartner(view, m[1] || null, m[2] || 'overview', panelCtx());
+  if ((m = /^console(?:-([a-z]+))?$/.exec(h))) return renderConsole(view, m[1] || 'overview', panelCtx());
   homeView();
 }
 
@@ -140,7 +145,8 @@ function homeView() {
     ${row(t('family'), now.filter((m) => m.genres.some((g) => ['Family', 'Animation', 'Comedy'].includes(g))).map((m) => card(m)))}
     ${row('Premiere', PREMIERES.map((p) => card(p, `#premiere-${p.id}`, 'PREMIERE')), state.lang === 'ta' ? 'வீட்டிலேயே புதுப் படங்கள்' : 'New movies to watch at home')}
     <section class="row"><div class="row-h"><h2>${t('near')}</h2></div><div class="rail">${ths.map(theatreCard).join('')}</div></section>
-    <a class="for-theatres" href="#admin">${icon('grid')}<span><b>${state.lang === 'ta' ? 'திரையரங்குகளுக்கு' : 'For theatres'}</b><small>${state.lang === 'ta' ? 'உங்கள் திரையின் இருக்கை அமைப்பை அமைக்கவும்' : 'Set up the real seat layout of each screen'}</small></span>${icon('right')}</a>`;
+    <a class="for-theatres" href="#partner">${icon('grid')}<span><b>${state.lang === 'ta' ? 'திரையரங்குகளுக்கு' : 'For theatres'}</b><small>${state.lang === 'ta' ? 'உங்கள் திரையின் இருக்கை அமைப்பை அமைக்கவும்' : 'Set up the real seat layout of each screen'}</small></span>${icon('right')}</a>
+    <p class="footnote"><a href="#console">Lumen admin console</a> · ${db.mode === 'server' ? 'Live data' : 'Demo data saved in this browser'}</p>`;
   view.querySelector('.filters').addEventListener('click', (e) => { const b = e.target.closest('[data-lang]'); if (!b) return; S.langFilter = b.dataset.lang; homeView(); });
   if (!S.city) setTimeout(() => openCitySheet(true), 300);
 }
@@ -185,16 +191,17 @@ function movieView(id) {
 const SF = { movie: null, lang: null, fmt: 'all', dk: null, price: 'any', part: 'any', sort: 'distance', q: '', late: false, early: false };
 function openFormatSheet(movieId) {
   const m = movieById(movieId);
-  const fmts = new Set();
-  for (let i = 0; i < 7; i++) showsFor({ cityId: app.city(), dk: dayKey(addDays(today(), i)), movieId }).forEach((s) => fmts.add(s.fmt));
-  const langs = m.langs || [m.lang];
+  // Only languages and formats that really have shows in the next 7 days
+  const byLang = new Map();
+  for (let i = 0; i < 7; i++) showsFor({ cityId: app.city(), dk: dayKey(addDays(today(), i)), movieId }).forEach((s) => { if (!byLang.has(s.lang)) byLang.set(s.lang, new Set()); byLang.get(s.lang).add(s.fmt); });
+  const langs = (m.langs || [m.lang]).filter((l) => byLang.has(l));
   openSheet(`<div><small class="muted">${esc(m.title)}</small><h2 class="sh-t">${state.lang === 'ta' ? 'மொழி மற்றும் வடிவத்தைத் தேர்வு செய்யுங்கள்' : 'Select language and format'}</h2></div>
-    ${langs.map((l) => `<div class="fmt-lang">${esc(l.toUpperCase())}</div><div class="fmt-row">${[...fmts].map((f) => `<button type="button" data-l="${esc(l)}" data-f="${esc(f)}">${esc(f)}</button>`).join('')}<button type="button" data-l="${esc(l)}" data-f="all">${state.lang === 'ta' ? 'அனைத்தும்' : 'Select all'}</button></div>`).join('')}
-    ${fmts.size ? '' : `<p class="muted">${t('no_shows')}</p>`}`,
+    ${langs.map((l) => `<div class="fmt-lang">${esc(l.toUpperCase())}</div><div class="fmt-row">${[...byLang.get(l)].map((f) => `<button type="button" data-l="${esc(l)}" data-f="${esc(f)}">${esc(f)}</button>`).join('')}${byLang.get(l).size > 1 ? `<button type="button" data-l="${esc(l)}" data-f="all">${state.lang === 'ta' ? 'அனைத்தும்' : 'Select all'}</button>` : ''}</div>`).join('')}
+    ${langs.length ? '' : `<p class="muted">${state.lang === 'ta' ? 'இந்த வாரம் உங்கள் நகரத்தில் காட்சிகள் இல்லை.' : 'No shows in your city this week. Try another city.'}</p>`}`,
   (sh) => sh.addEventListener('click', (e) => {
     const b = e.target.closest('[data-f]'); if (!b) return;
-    Object.assign(SF, { movie: movieId, lang: b.dataset.l, fmt: b.dataset.f, dk: SF.movie === movieId ? SF.dk : null });
-    closeSheet(); location.hash = 'shows-' + movieId;
+    Object.assign(SF, { movie: movieId, lang: b.dataset.l, fmt: b.dataset.f, dk: null });
+    closeSheet(); if (location.hash === '#shows-' + movieId) route(); else location.hash = 'shows-' + movieId;
   }));
 }
 
@@ -204,7 +211,7 @@ function showsView(id) {
   if (SF.movie !== id) Object.assign(SF, { movie: id, lang: (m.langs || [m.lang])[0], fmt: 'all', dk: null });
   if (!SF.dk) {
     SF.dk = dayKey(today());
-    for (let i = 0; i < 7; i++) { const dk = dayKey(addDays(today(), i)); if (showsFor({ cityId: app.city(), dk, movieId: id }).length) { SF.dk = dk; break; } }
+    for (let i = 0; i < 7; i++) { const dk = dayKey(addDays(today(), i)); if (showsFor({ cityId: app.city(), dk, movieId: id }).some((s) => s.lang === SF.lang && (SF.fmt === 'all' || s.fmt === SF.fmt))) { SF.dk = dk; break; } }
   }
   const days = Array.from({ length: 7 }, (_, i) => addDays(today(), i));
   const sel = (id2, opts, val) => `<label class="dd"><select id="${id2}" aria-label="${id2}">${opts.map(([v, l]) => `<option value="${v}" ${v === val ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>`;
@@ -321,10 +328,13 @@ function seatsView(showId) {
     <div class="seat-layout">
       <section class="map-card">
         <div class="map-tools">
-          <div class="seg" role="group"><button type="button" data-mode="class" aria-pressed="true">${t('by_class')}</button><button type="button" data-mode="view" aria-pressed="false">${icon('eye')}${t('view_quality')}</button></div>
-          <div class="zoom"><button type="button" class="iconbtn sm" data-z="out" aria-label="Zoom out">${icon('minus')}</button><button type="button" class="iconbtn sm" data-z="in" aria-label="Zoom in">${icon('plus')}</button></div>
+          <div class="seg dim" id="dimSeg" role="group" aria-label="2D or 3D"><button type="button" data-dim="2d" aria-pressed="true">${icon('grid')}2D</button><button type="button" data-dim="3d" aria-pressed="false">${icon('cube')}3D</button></div>
+          <div class="seg" id="modeSeg" role="group"><button type="button" data-mode="class" aria-pressed="true">${t('by_class')}</button><button type="button" data-mode="view" aria-pressed="false">${icon('eye')}${t('view_quality')}</button></div>
+          <div class="zoom" id="zoomBox"><button type="button" class="iconbtn sm" data-z="out" aria-label="Zoom out">${icon('minus')}</button><button type="button" class="iconbtn sm" data-z="in" aria-label="Zoom in">${icon('plus')}</button></div>
         </div>
         <div id="map" class="map"></div>
+        <div id="map3d" class="map3d" hidden><div class="m3-host" id="m3Host"></div><div class="pv-score m3-score" id="m3Score">${state.lang === 'ta' ? '3D-யில் இருக்கையைத் தொட்டு தேர்வு செய்யுங்கள்' : 'Tap seats in the hall to pick them. Drag to look around.'}</div>
+          <div class="m3-ctl"><div class="seg" id="m3Presets"><button type="button" data-p="overview">${t('v_overview')}</button><button type="button" data-p="front">${t('v_front')}</button><button type="button" data-p="back">${t('v_back')}</button></div><button type="button" class="btn primary sm" id="m3Mine">${icon('eye')}${state.lang === 'ta' ? 'என் இருக்கைப் பார்வை' : 'View from my seat'}</button></div></div>
         <div class="legend" id="legend"></div>
         <div class="offers">${OFFERS.map((o) => `<span><b>${o.code}</b> · ${esc(o.en)}</span>`).join('')}</div>
       </section>
@@ -344,7 +354,7 @@ function seatsView(showId) {
       : Object.entries(prices).map(([k, p]) => `<span><i style="background:${CLASS_META[k].color}"></i>${esc(clsName(k))} ${inr(p)}</span>`).join('') + `<span><i class="lg-b">${icon('person')}</i>${state.lang === 'ta' ? 'விற்றது' : 'Sold'}</span><span><i class="lg-s"></i>${state.lang === 'ta' ? 'சிறந்த பார்வை' : 'Bestseller (best view)'}</span><span><i class="lg-p"></i>${state.lang === 'ta' ? 'தேர்வு' : 'Selected'}</span><span><i class="lg-a">${icon('wheel')}</i>${t('wheelchair')}</span>`;
   }
   legend();
-  view.querySelector('.seg').addEventListener('click', (e) => { const b = e.target.closest('[data-mode]'); if (!b) return; viewMode = b.dataset.mode; $$('.seg button', view).forEach((x) => x.setAttribute('aria-pressed', String(x === b))); map.setMode(viewMode); legend(); });
+  $('#modeSeg').addEventListener('click', (e) => { const b = e.target.closest('[data-mode]'); if (!b) return; viewMode = b.dataset.mode; $$('#modeSeg button').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); map.setMode(viewMode); legend(); });
   view.querySelector('.zoom').addEventListener('click', (e) => { const b = e.target.closest('[data-z]'); if (b) map.zoom(b.dataset.z === 'in' ? 1.25 : 0.8); });
 
   function setSel(ids) {
@@ -379,7 +389,7 @@ function seatsView(showId) {
     $('#countBtn').innerHTML = `${icon('seat')}${count ? `${count} ${state.lang === 'ta' ? 'டிக்கெட்' : count === 1 ? 'Ticket' : 'Tickets'}` : t('how_many')}`;
     const vb = $('#viewBtn'); vb.hidden = !focus; if (focus) vb.querySelector('span').textContent = t('view_from', { id: focus.id });
     $('#clearSel').hidden = !list.length;
-    hall?.refresh?.();
+    hall?.refresh?.(); hall3?.refresh?.();
   }
   $('#selList').addEventListener('click', (e) => { const b = e.target.closest('[data-id]'); if (!b) return; focus = lay.byId.get(b.dataset.id); map.focus(focus); updatePreview(true); });
   $('#clearSel').addEventListener('click', () => { setSel([]); focus = null; updatePreview(); });
@@ -413,6 +423,38 @@ function seatsView(showId) {
   $('#viewBtn').addEventListener('click', () => { if (wide()) ensureInline(); else updatePreview(true); });
   $('#preview').addEventListener('click', () => { if (!hall && wide()) ensureInline(); });
   $('#goPay').addEventListener('click', () => startCheckout(movieOrder(show, [...selected], {})));
+
+  // 2D / 3D: pick seats directly inside the 3D hall
+  let hall3 = null, loading3 = false;
+  async function set3d(on) {
+    $$('#dimSeg button').forEach((x) => x.setAttribute('aria-pressed', String((x.dataset.dim === '3d') === on)));
+    $('#map').hidden = on; $('#modeSeg').hidden = on; $('#zoomBox').hidden = on; $('#map3d').hidden = !on;
+    if (!on) { hall3?.dispose(); hall3 = null; return; }
+    if (hall3 || loading3) return;
+    if (hall) { hall.dispose(); hall = null; $('#pvEmpty').hidden = false; $('#pvEmpty').innerHTML = `${icon('cube')}<span>${state.lang === 'ta' ? '3D பார்வை இடப்பக்கம் திறந்துள்ளது' : '3D view is open on the left'}</span>`; }
+    loading3 = true; $('#m3Host').innerHTML = `<div class="pv-empty"><span class="spin"></span><span>${t('loading3d')}</span></div>`;
+    let h = null;
+    try { const { mountHall } = await import('./hall3d.js'); $('#m3Host').innerHTML = ''; h = await mountHall($('#m3Host'), lay, { movie: m, booked, selected, tier: TIER, onSeatTap: (s) => { onTap(s); show3Score(s); } }); } catch (e) { h = null; }
+    loading3 = false;
+    if (!$('#map3d') || $('#map3d').hidden) { h?.dispose(); return; }
+    if (!h) { $('#m3Host').innerHTML = `<div class="pv-empty"><span>${t('no3d')}</span></div>`; return; }
+    hall3 = h; onLeave(() => { hall3?.dispose(); hall3 = null; });
+    hall3.preset('overview');
+  }
+  function show3Score(s) { $('#m3Score').innerHTML = `<b>${s.id}</b><span class="sc-big" style="--sc:${scoreColor(s.score)}">${s.score}<small>/100</small></span><span>${booked.has(s.id) ? t('booked') : t('l_' + scoreLabel(s.score))}<small>${esc(clsName(s.cls))} · ${inr(prices[s.cls])}</small></span>`; }
+  $('#dimSeg').addEventListener('click', (e) => { const b = e.target.closest('[data-dim]'); if (b) set3d(b.dataset.dim === '3d'); });
+  $('#m3Presets').addEventListener('click', (e) => { const b = e.target.closest('[data-p]'); if (b && hall3) hall3.preset(b.dataset.p); });
+  $('#m3Mine').addEventListener('click', () => { const s = focus || lay.byId.get([...selected][0]); if (!s) { toast(t('pick_seats')); return; } hall3?.seatView(s); show3Score(s); });
+
+  // Seats sold or being paid for by other people right now (live when the server runs)
+  async function syncTaken() {
+    const tk = await db.taken(show.id); let changed = false, lost = [];
+    for (const id of [...tk.booked, ...tk.held]) if (lay.byId.has(id) && !booked.has(id)) { booked.add(id); changed = true; if (selected.has(id)) { selected.delete(id); lost.push(id); } }
+    if (!changed) return;
+    map.paintAll(); hall?.refresh?.(); hall3?.refresh?.(); refresh();
+    if (lost.length) toast(state.lang === 'ta' ? `${lost.join(', ')} இப்போது வேறொருவரால் எடுக்கப்பட்டது.` : `${lost.join(', ')} was just taken by someone else.`);
+  }
+  syncTaken(); const takenTimer = setInterval(syncTaken, 15000); onLeave(() => clearInterval(takenTimer));
 
   function askCount(after) {
     const clsAvail = (k) => { const all = lay.seats.filter((s) => s.cls === k); const free = all.filter((s) => !booked.has(s.id)).length / all.length; return free < 0.1 ? ['bad', state.lang === 'ta' ? 'நிரம்பியது' : 'Almost full'] : free < 0.4 ? ['', t('fast')] : ['ok', t('avail')]; };
@@ -521,10 +563,15 @@ const TERMS = [
   'Cancellation: 75% of the ticket price back up to 4 hours before the show, 50% up to 2 hours before, none after that. Fees are not refunded.',
 ];
 let currentOrder = null;
-function startCheckout(order) {
+async function startCheckout(order) {
   if (order.kind === 'movie') {
-    const show = showById(order.showId);
-    app.hold(show.id, order.seats);
+    const r = await app.hold(order.showId, order.seats).catch(() => ({ ok: false, error: true }));
+    if (!r.ok) {
+      toast(r.error ? (state.lang === 'ta' ? 'இணைப்பு இல்லை. மீண்டும் முயற்சிக்கவும்.' : 'Could not reach the server. Check your connection and try again.')
+        : (state.lang === 'ta' ? `${r.taken.join(', ')} இப்போதுதான் வேறொருவரால் எடுக்கப்பட்டது.` : `${r.taken.join(', ')} was just taken by someone else. Please pick again.`));
+      if (!r.error) route();
+      return;
+    }
   }
   openSheet(`<h2 class="sh-t">${state.lang === 'ta' ? 'விதிமுறைகள்' : 'Terms & Conditions'}</h2>
     <ol class="terms">${TERMS.map((x) => `<li>${esc(x)}</li>`).join('')}</ol>
@@ -628,9 +675,13 @@ function payView() {
       if (why) { toast(why); return; }
       P.offer = P.offer?.code === of.code ? null : of; summary();
     });
-    $('#payNow').addEventListener('click', () => {
+    $('#payNow').addEventListener('click', async (e) => {
+      const btn = e.currentTarget; if (btn.disabled) return; btn.disabled = true;
+      let b = null;
+      try { b = await saveBooking(o, P.method, payable, { donate: P.donate, offer: P.offer?.code || null, fees: p.conv + p.gst, discount: p.disc }); }
+      catch (err) { btn.disabled = false; toast(state.lang === 'ta' ? 'இணைப்பு இல்லை. மீண்டும் முயற்சிக்கவும்.' : 'Payment could not be completed. Check your connection and try again.'); return; }
+      if (!b) { toast(state.lang === 'ta' ? 'இருக்கைகள் இனி கிடைக்காது.' : 'Those seats are no longer available. Please pick again.'); if (o.showId) location.hash = 'show-' + o.showId; return; }
       if (P.method === 'Points') { S.points -= Math.round(pts * 4); store.set('points', S.points); }
-      const b = saveBooking(o, P.method, payable, { donate: P.donate, offer: P.offer?.code || null, fees: p.conv + p.gst });
       if (o.showId) app.release(o.showId);
       currentOrder = null; location.hash = 'ticket-' + b.id;
     });
@@ -649,11 +700,16 @@ function payView() {
 }
 // The contact sheet reopened from the payment page only needs to save
 const _contactStep = contactStep;
-function saveBooking(o, method, total, extra = {}) {
-  const b = { id: 'LM' + Date.now().toString(36).toUpperCase().slice(-6), kind: o.kind, showId: o.showId || null, eventId: o.eventId || null, premiereId: o.premiereId || null,
+async function saveBooking(o, method, total, extra = {}) {
+  const b = { id: 'LM' + Date.now().toString(36).toUpperCase().slice(-5) + Math.random().toString(36).slice(2, 4).toUpperCase(), kind: o.kind, showId: o.showId || null, eventId: o.eventId || null, premiereId: o.premiereId || null,
     seats: o.seats || null, tiers: o.tiers || null, snacks: o.snacks || {}, pickup: o.pickup || null, qty: o.qty, method, total, at: Date.now(),
-    contact: { ...S.contact }, ...extra };
-  S.bookings.unshift(b); store.set('bookings', S.bookings); renderHeader();
+    contact: { ...S.contact }, city: app.city(), ...extra };
+  if (o.kind === 'movie') { const sh = showById(o.showId); if (sh) { const pr = pricesOf(sh), lay = layoutOf(sh); b.theatreId = sh.theatreId; b.ticketAmount = b.seats.reduce((a, id) => a + (pr[lay.byId.get(id)?.cls] || 0), 0); } }
+  else if (o.kind === 'event') b.ticketAmount = o.lines.reduce((a, l) => a + l.amount, 0);
+  else b.ticketAmount = o.lines.reduce((a, l) => a + l.amount, 0);
+  const r = await db.book(b);
+  if (!r.ok) return null;
+  renderHeader();
   return b;
 }
 
@@ -721,7 +777,7 @@ function ticketView(id) {
     const txt = `${info.title} · ${info.when} · ${info.where} · ${info.rows.map((r) => r.join(': ')).join(' · ')} · Booking ${b.id}`;
     navigator.clipboard?.writeText(txt).then(() => toast(t('copied')), () => toast(txt));
   });
-  $('#tkCancel')?.addEventListener('click', () => { b.cancelled = true; b.refund = rf.amount; store.set('bookings', S.bookings); renderHeader(); toast(`${t('cancelled')} ${rf.amount ? inr(rf.amount) + ' will reach your account in 5–7 days.' : ''}`); ticketView(id); });
+  $('#tkCancel')?.addEventListener('click', async () => { await db.cancel(b.id, rf.amount); renderHeader(); toast(`${t('cancelled')} ${rf.amount ? inr(rf.amount) + ' will reach your account in 5–7 days.' : ''}`); ticketView(id); });
 }
 function ticketsView() {
   const list = S.bookings.filter((b) => ticketInfo(b));
@@ -772,8 +828,9 @@ function premiereView(id) {
 
 /* ---------- seat layout editor ---------- */
 function adminView(id) {
-  renderAdmin(view, id, { city: app.city, S, store, tier: TIER, onLeave, openSheet, closeSheet, refreshForm: null });
+  renderAdmin(view, id, { city: app.city, db, tier: TIER, onLeave, openSheet, closeSheet, refreshForm: null });
 }
+const panelCtx = () => ({ city: app.city, setCity: app.setCity, db, tier: TIER, onLeave, openSheet, closeSheet, route });
 
 /* ---------- sheets: city, search, generic ---------- */
 function openSheet(html, bind) {
@@ -834,4 +891,5 @@ document.addEventListener('click', (e) => {
 });
 addEventListener('keydown', (e) => { if (e.key !== 'Escape') return; if (!$('#viewer').hidden) closeViewer(); else if (!$('#sheet').hidden) closeSheet(); else if (agent.isOpen()) agent.close(); });
 addEventListener('hashchange', route);
+await db.init();
 route();

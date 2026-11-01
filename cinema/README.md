@@ -8,9 +8,13 @@ All movies, theatres, events and shows are fictional demo data. Payment is a dem
 
 ```bash
 cd cinema
-python -m http.server 5500
+node server.js            # Node 18+, nothing to install
 # open http://127.0.0.1:5500
 ```
+
+- **With `node server.js`** every device shares the same data (saved in `cinema/data/db.json`): bookings, real 5-minute seat holds, schedules, prices, layouts, KYC, movies, offers and fees.
+- **Without the server** (any static host, e.g. `python -m http.server 5500`), the app still works and keeps data in that browser only.
+- Customer app: `/#home` · Theatre partner panel: `/#partner` · Admin console: `/#console` · Seat layout editor: `/#admin-<screen id>` (open it from the partner panel).
 
 Voice input needs Chrome or Edge on `localhost`/`127.0.0.1` (or HTTPS). Typing works everywhere.
 
@@ -33,6 +37,31 @@ Five hall shapes, each with its own seat classes and prices (`layout.js`): stadi
 
 ### View score
 For each seat: distance as a multiple of screen width, side angle, and how far up you have to look. 88+ Perfect, 75+ Great, 60+ Good, 45+ Okay, below that Tough (e.g. "very close to the screen", "you look up a lot").
+
+## Partner panel and admin console
+
+| Theatre partner panel (`#partner`) | Lumen admin console (`#console`) |
+|---|---|
+| Overview: tickets sold, earnings, today's shows, next payout | Overview: bookings, gross value, Lumen revenue, GST, owed to theatres |
+| Shows: switch to your own schedule, add shows for a date range (overlap check: runtime + 20 min cleaning), remove shows without bookings | Theatres: review KYC (approve / reject with a note), suspend or make live |
+| Prices per screen and seat class | Movie catalogue: add / edit / remove movies, hide built-in ones |
+| Seat layouts: open the layout editor per screen | Offers: create, pause, delete (rules: morning only, UPI only, min tickets) |
+| Bank & KYC: GSTIN / PAN / IFSC / account validation, payout cycle | Fees: booking fee, GST %, seat-hold minutes, demo crowd on/off |
+| Sales & payouts: bookings, refunds, weekly payouts (on hold until KYC is verified) | Bookings: all bookings, filter by city, cancel with full refund |
+
+Money split per booking: the theatre gets the ticket price and food (minus refunds); Lumen keeps the booking fee (GST is shown separately); offer discounts are paid by Lumen.
+
+## Production checklist (honest status)
+
+Built and tested: customer app, 3D/2D seat picking, assistant, partner panel, admin console, shared server with seat holds and double-booking protection, responsive layouts (checked at 320 px, 360 px, 390 px and 1366 px with no sideways overflow on 22 screens), light/dark themes, Tamil/English.
+
+Still needed before real customers and real money:
+1. **Login and roles**: OTP login for customers, separate logins for each theatre partner and for Lumen staff. Today anyone who opens `#partner` or `#console` can use them.
+2. **Real payment gateway** (e.g. Razorpay or PayU) with split settlement to theatre bank accounts, refunds through the gateway, and webhook-verified payment status. The current payment step is a demo.
+3. **Production database** (PostgreSQL or MySQL) instead of one JSON file, with backups. Encrypt KYC and bank details; verify accounts with a penny-drop check.
+4. **Hosting** on HTTPS with a domain, rate limiting, logging and monitoring.
+5. **Integrations** with theatre box-office software, so counter sales and app sales share one seat inventory.
+6. **Legal**: partner agreements, privacy policy, terms, GST invoicing.
 
 ## Speed (low-end friendly)
 
@@ -86,6 +115,12 @@ The current model handles booking requests. For free-form chat ("which is better
 
 ```
 index.html     page shell
+server.js      Node server: static files + shared JSON API (holds, bookings, panels)
+db.js          data layer: talks to server.js, or saves in the browser without it
+partner.js     theatre partner panel
+console.js     Lumen admin console
+admin.js       seat layout editor
+config.json    tells the app whether a server is running
 styles.css     light + dark themes, 4-colour palette (ink, paper, red, teal)
 data.js        cities, theatres, movies, events, premieres, offers, show schedule
 layout.js      hall shapes, seats, view score, best seats
