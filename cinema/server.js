@@ -34,15 +34,16 @@ const HOST = process.env.HOST || '127.0.0.1';
 const DATA = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(ROOT, 'data');
 const DB_FILE = path.join(DATA, 'db.json');
 const UPLOADS = path.join(DATA, 'uploads');
-const SECTIONS = ['movies', 'hiddenMovies', 'schedule', 'theatres', 'offers', 'fees', 'layouts', 'prices'];
+const SECTIONS = ['movies', 'hiddenMovies', 'schedule', 'theatres', 'offers', 'fees', 'layouts', 'prices', 'billing'];
 const PARTNER_SECTIONS = ['schedule', 'layouts', 'prices']; // keyed by screen id
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.mp4': 'video/mp4', '.webm': 'video/webm', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json', '.md': 'text/plain; charset=utf-8', '.bat': 'text/plain; charset=utf-8', '.sh': 'text/plain; charset=utf-8' };
 const DAY = 864e5;
 
 /* ---------------- storage ---------------- */
 let db = { movies: [], hiddenMovies: [], schedule: {}, theatres: {}, offers: null, fees: null, layouts: {}, prices: {}, bookings: [],
-  users: [], sessions: {}, newTheatres: [], media: { movies: {}, theatres: {} }, banners: [] };
+  users: [], sessions: {}, newTheatres: [], media: { movies: {}, theatres: {} }, banners: [], payments: [], billing: null };
 try { db = { ...db, ...JSON.parse(fs.readFileSync(DB_FILE, 'utf8')) }; } catch (e) { /* first run */ }
+db.payments ||= [];
 db.media ||= { movies: {}, theatres: {} }; db.media.movies ||= {}; db.media.theatres ||= {};
 let saveTimer = null;
 function save() {
@@ -65,7 +66,41 @@ function checkPw(user, pw) {
 const pwProblem = (pw) => (typeof pw !== 'string' || pw.length < 8 ? 'Use at least 8 characters.' : !/[A-Za-z]/.test(pw) || !/\d/.test(pw) ? 'Use both letters and numbers.' : null);
 const normEmail = (e) => String(e || '').trim().toLowerCase();
 const emailOk = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e);
-const publicUser = (u) => u && ({ id: u.id, email: u.email, name: u.name, phone: u.phone, role: u.role, status: u.status, theatreIds: u.theatreIds || [], request: u.request || null, note: u.note || '', createdAt: u.createdAt });
+const publicUser = (u) => u && ({ id: u.id, email: u.email, name: u.name, phone: u.phone, role: u.role, status: u.status, theatreIds: u.theatreIds || [], request: u.request || null, note: u.note || '', createdAt: u.createdAt, sub: u.sub || null });
+
+/* ---------------- partner plans (subscription) ---------------- */
+// Prices are set by the admin (Console → Fees). Yearly = list price minus the yearly discount.
+const plans = () => {
+  const b = { monthly: 399, yearlyList: 5000, yearlyOffPct: 20, graceDays: 7, ...(db.billing || {}) };
+  const yearly = Math.round(b.yearlyList * (1 - b.yearlyOffPct / 100));
+  return { monthly: { id: 'monthly', amount: b.monthly, days: 30, label: 'Monthly' },
+    yearly: { id: 'yearly', amount: yearly, list: b.yearlyList, offPct: b.yearlyOffPct, save: b.yearlyList - yearly, days: 365, label: 'Yearly' }, graceDays: b.graceDays };
+};
+const RZP = () => (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET ? { id: process.env.RAZORPAY_KEY_ID, secret: process.env.RAZORPAY_KEY_SECRET } : null);
+function rzpOrder(amountPaise, receipt, notes) {
+  const k = RZP();
+  return new Promise((resolve, reject) => {
+    const data = JSON.stringify({ amount: amountPaise, currency: 'INR', receipt, notes });
+    const r = require('https').request({ host: 'api.razorpay.com', path: '/v1/orders', method: 'POST', auth: `${k.id}:${k.secret}`, headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(data) }, timeout: 15000 }, (res) => {
+      let b = ''; res.on('data', (c) => { b += c; }); res.on('end', () => { try { const j = JSON.parse(b); res.statusCode < 300 ? resolve(j) : reject(new Error(j.error?.description || 'Payment gateway error')); } catch (e) { reject(new Error('Payment gateway error')); } });
+    });
+    r.on('timeout', () => r.destroy(new Error('Payment gateway timed out'))); r.on('error', reject); r.end(data);
+  });
+}
+// Theatres whose owner's plan ran out more than graceDays ago are hidden from customers
+function lapsedTheatres() {
+  const g = plans().graceDays * DAY, now = Date.now(), out = new Set(), ok = new Set();
+  for (const u of db.users) if (u.role === 'partner' && u.status === 'active') for (const t of u.theatreIds || []) {
+    if (u.sub && u.sub.until + g < now) out.add(t); else ok.add(t);
+  }
+  return [...out].filter((t) => !ok.has(t));
+}
+function activatePlan(user, pay) {
+  const pl = plans()[pay.plan];
+  const from = Math.max(Date.now(), user.sub?.until || 0);
+  user.sub = { plan: pay.plan, amount: pay.amount, since: user.sub?.since || Date.now(), until: from + pl.days * DAY, lastPaymentId: pay.id };
+  pay.status = 'paid'; pay.paidAt = Date.now(); pay.periodFrom = from; pay.periodTo = user.sub.until;
+}
 
 if (!db.users.some((u) => u.role === 'admin')) {
   const email = normEmail(process.env.ADMIN_EMAIL || 'admin@lumen.local');
@@ -208,7 +243,8 @@ function stateFor(u, client) {
   else bookings = db.bookings.filter((b) => b.client === client || (u && b.theatreId && ownsTheatre(u, b.theatreId)))
     .map((b) => (b.client === client ? b : { ...b, contact: b.contact ? { email: b.contact.email.replace(/^(.).*(@.*)$/, '$1•••$2'), phone: b.contact.phone ? '•••••' + b.contact.phone.slice(-4) : '' } : null }));
   return { movies: db.movies, hiddenMovies: db.hiddenMovies, schedule: db.schedule, theatres, offers: db.offers, fees: db.fees, layouts: db.layouts, prices: db.prices,
-    newTheatres: db.newTheatres, media: db.media, banners, bookings, me: publicUser(u) };
+    newTheatres: db.newTheatres, media: db.media, banners, bookings, me: publicUser(u), billing: db.billing, lapsed: lapsedTheatres(),
+    payments: u ? db.payments.filter((x) => u.role === 'admin' || x.userId === u.id) : [] };
 }
 
 /* ---------------- API ---------------- */
@@ -234,6 +270,7 @@ async function apiRoute(req, res, url) {
     const user = db.users.find((x) => x.email === email);
     if (!user || !checkPw(user, password || '')) return send(res, 401, { error: 'Email or password is wrong.' });
     if (user.status === 'unverified') return send(res, 403, { error: 'Verify your email first. We can send a new code.', code: 'unverified' });
+    if (user.status === 'pending' && !user.sub) { user.payToken = uid(18); save(); return send(res, 403, { error: 'Choose your plan and pay to finish registration.', code: 'unpaid', payToken: user.payToken, email: user.email }); }
     if (user.status === 'pending') return send(res, 403, { error: 'Your account is waiting for Lumen’s approval. We’ll email you once it’s approved.' });
     if (user.status === 'rejected') return send(res, 403, { error: `Your registration was not approved${user.note ? ': ' + user.note : '.'}` });
     if (user.status === 'disabled') return send(res, 403, { error: 'This account is turned off. Contact Lumen support.' });
@@ -287,8 +324,8 @@ async function apiRoute(req, res, url) {
     const user = db.users.find((x) => x.email === email && x.status === 'unverified');
     if (!user) return send(res, 400, { error: 'Nothing to verify for this email.' });
     const err = useOtp(email, 'verify', otp); if (err) return send(res, 400, { error: err });
-    user.status = 'pending'; save();
-    return send(res, 200, { ok: true });
+    user.status = 'pending'; user.payToken = uid(18); save();
+    return send(res, 200, { ok: true, payToken: user.payToken });
   }
   if (p === 'auth/reset' && m === 'POST') {
     const { email: e, otp, password } = await body(req); const email = normEmail(e);
@@ -309,12 +346,49 @@ async function apiRoute(req, res, url) {
     return send(res, 200, { ok: true });
   }
 
+  /* ---- partner plans & payments ---- */
+  if (p === 'billing/plans' && m === 'GET') { const pl = plans(); return send(res, 200, { monthly: pl.monthly, yearly: pl.yearly, graceDays: pl.graceDays, gateway: RZP() ? 'razorpay' : 'demo' }); }
+  // Who is paying: a signed-in partner (renewal) or a new partner finishing registration (payToken)
+  const payer = async (b) => {
+    if (u && u.role === 'partner') return u;
+    const t = String(b.payToken || ''); return t.length > 10 ? db.users.find((x) => x.payToken === t && x.role === 'partner' && ['pending', 'active'].includes(x.status)) : null;
+  };
+  if (p === 'billing/order' && m === 'POST') {
+    const b = await body(req); const user = await payer(b);
+    if (!user) return send(res, 401, { error: 'Please sign in again to pay.' });
+    const pl = plans()[b.plan]; if (!pl || !pl.days) return send(res, 400, { error: 'Pick monthly or yearly.' });
+    if (limited('pay|' + user.id, 10, 60 * 60000)) return send(res, 429, { error: 'Too many payment attempts. Try again in an hour.' });
+    const pay = { id: 'PAY' + uid(6).toUpperCase().replace(/[^A-Z0-9]/g, 'X'), userId: user.id, email: user.email, plan: pl.id, amount: pl.amount, status: 'created', gateway: RZP() ? 'razorpay' : 'demo', createdAt: Date.now() };
+    if (RZP()) {
+      try { const o = await rzpOrder(pl.amount * 100, pay.id, { plan: pl.id, email: user.email }); pay.orderId = o.id; }
+      catch (e) { return send(res, 502, { error: e.message }); }
+    }
+    db.payments.unshift(pay); save();
+    return send(res, 200, { payId: pay.id, gateway: pay.gateway, amount: pay.amount, plan: pl, orderId: pay.orderId || null, key: RZP()?.id || null, name: user.name, email: user.email, phone: user.phone || '' });
+  }
+  if (p === 'billing/verify' && m === 'POST') {
+    const b = await body(req); const user = await payer(b);
+    const pay = db.payments.find((x) => x.id === b.payId);
+    if (!user || !pay || pay.userId !== user.id) return send(res, 404, { error: 'Payment not found.' });
+    if (pay.status === 'paid') return send(res, 200, { ok: true, sub: user.sub });
+    if (pay.gateway === 'razorpay') {
+      const k = RZP(); if (!k) return send(res, 400, { error: 'Payment gateway is not set up.' });
+      const want = crypto.createHmac('sha256', k.secret).update(`${pay.orderId}|${b.razorpay_payment_id}`).digest('hex');
+      const got = String(b.razorpay_signature || '');
+      if (b.razorpay_order_id !== pay.orderId || got.length !== want.length || !crypto.timingSafeEqual(Buffer.from(got), Buffer.from(want))) { pay.status = 'failed'; save(); return send(res, 400, { error: 'We could not confirm this payment. If money was taken, it will be refunded automatically.' }); }
+      pay.gatewayPaymentId = b.razorpay_payment_id;
+    } else if (RZP()) return send(res, 400, { error: 'Demo payments are turned off.' });
+    activatePlan(user, pay); save();
+    sendMail(user.email, `Lumen receipt ${pay.id}: ₹${pay.amount}`, `Hi ${user.name},\r\n\r\nThanks for your payment of Rs ${pay.amount} for the Lumen ${pay.plan} plan.\r\nReceipt: ${pay.id}${pay.gateway === 'demo' ? ' (demo payment, no money taken)' : ''}\r\nValid until: ${new Date(user.sub.until).toDateString()}\r\n\r\nLumen Cinemas`).catch(() => {});
+    return send(res, 200, { ok: true, sub: user.sub, status: user.status });
+  }
+
   /* ---- admin: partners ---- */
   if (p === 'admin/users' && m === 'GET') { if (!need('admin')) return; return send(res, 200, { users: db.users.map(publicUser) }); }
   let mm;
   if ((mm = /^admin\/users\/([\w-]+)$/.exec(p)) && m === 'POST') {
     if (!need('admin')) return;
-    const { action, note, theatreIds } = await body(req);
+    const { action, note, theatreIds, days } = await body(req);
     const user = db.users.find((x) => x.id === mm[1]); if (!user || user.role === 'admin') return send(res, 404, { error: 'No such partner.' });
     if (action === 'approve') {
       let ids = Array.isArray(theatreIds) ? theatreIds.filter((x) => /^c\d+t\d+$/.test(x)) : [];
@@ -333,6 +407,7 @@ async function apiRoute(req, res, url) {
     } else if (action === 'reject') { if (!note || note.length < 5) return send(res, 400, { error: 'Add a short reason.' }); user.status = 'rejected'; user.note = note; }
     else if (action === 'disable') { user.status = 'disabled'; for (const [k, s] of Object.entries(db.sessions)) if (s.userId === user.id) delete db.sessions[k]; }
     else if (action === 'enable') user.status = 'active';
+    else if (action === 'grant') { const nd = Math.max(1, Math.min(730, +days || 30)); const from = Math.max(Date.now(), user.sub?.until || 0); user.sub = { ...(user.sub || { since: Date.now() }), plan: user.sub?.plan || 'free', amount: user.sub?.amount || 0, until: from + nd * DAY }; }
     else return send(res, 400, { error: 'Unknown action' });
     save(); return send(res, 200, { user: publicUser(user) });
   }
@@ -490,7 +565,7 @@ http.createServer(async (req, res) => {
       return serveFile(req, res, f, 'public, max-age=31536000, immutable');
     }
     const file = path.normalize(path.join(ROOT, rel === '/' ? '/index.html' : rel));
-    if (!file.startsWith(ROOT + path.sep) || file === DATA || file.startsWith(DATA + path.sep) || /server\.js$|settings(\.example)?\.env$/.test(file) || /[\\/]\.git([\\/]|$)/.test(file)) { res.writeHead(403); return res.end('Forbidden'); }
+    if (!file.startsWith(ROOT + path.sep) || [DATA, path.join(ROOT, 'data')].some((d) => file === d || file.startsWith(d + path.sep)) || /server\.js$|settings(\.example)?\.env$/.test(file) || /[\\/]\.git([\\/]|$)/.test(file)) { res.writeHead(403); return res.end('Forbidden'); }
     serveFile(req, res, file, 'no-cache');
   } catch (e) { if (!res.headersSent) send(res, e.status || 400, { error: e.message }); }
 }).on('error', (e) => {

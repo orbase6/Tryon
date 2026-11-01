@@ -2,6 +2,7 @@
 import { CITIES, theatresFor, theatreById, baseMovies, MOVIES, movieById, baseOffers, bookingMoney, showById, fromKey, hmLabel, isNowShowing, releaseDate, dayKey, today, LIVE } from './data.js';
 import { icon, esc, inr, $, $$, toast, fmtDate, poster } from './ui.js';
 import { gate, openAccount } from './auth.js';
+import { receiptsTable, rupees, fmtDay } from './billing.js';
 import { uploadBox, bindUpload, bannerPreview, bannerState, STATUS } from './media.js';
 
 const TABS = [['overview', 'Overview'], ['partners', 'Partners'], ['theatres', 'Theatres'], ['movies', 'Movies'], ['banners', 'Banners'], ['offers', 'Offers'], ['fees', 'Fees'], ['bookings', 'Bookings']];
@@ -43,20 +44,25 @@ function partners(host, ctx) {
   const req = (x) => { const r = x.request || {}; if (r.mode === 'existing') { const t = theatreById(r.theatreId); return `Runs <b>${esc(t ? t.name + ' · ' + t.area : r.theatreId)}</b>`; }
     if (r.mode === 'new') return `New theatre <b>${esc(r.name)}</b>, ${esc(r.area)}, ${esc(CITIES.find((c) => c.id === r.cityId)?.en || r.cityId)}<small>${(r.screens || []).map((s) => `${esc(s.name)} (${esc(s.hall)}, ${esc(s.fmt)})`).join(' · ')}</small>`; return '—'; };
   host.innerHTML = `<h2 class="sec">Partner accounts</h2>
-    ${list.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Partner</th><th>Theatre</th><th>Status</th><th></th></tr></thead><tbody>${list.map((x) => `<tr>
+    ${list.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Partner</th><th>Theatre</th><th>Plan</th><th>Status</th><th></th></tr></thead><tbody>${list.map((x) => `<tr>
       <td><b>${esc(x.name)}</b><small>${esc(x.email)} · +91 ${esc(x.phone || '')}<br>Registered ${new Date(x.createdAt).toLocaleDateString('en-IN')}</small></td>
       <td>${req(x)}${x.theatreIds.length ? `<small>Linked: ${x.theatreIds.map((id) => esc(theatreById(id)?.name || id)).join(', ')}</small>` : ''}</td>
+      <td>${x.sub ? `${chip(x.sub.until > Date.now() ? (x.sub.plan === 'yearly' ? 'Yearly' : x.sub.plan === 'monthly' ? 'Monthly' : 'Free') + ' · paid' : 'Plan ended', x.sub.until > Date.now() ? 'ok' : 'bad')}<small>until ${fmtDay(x.sub.until)}</small>` : chip('Not paid', 'warn')}</td>
       <td>${chip(...USER_ST[x.status])}${x.note ? `<small>${esc(x.note)}</small>` : ''}</td>
       <td class="acts">${x.status === 'pending' ? `<button type="button" class="btn primary sm" data-ua="approve" data-id="${x.id}">${icon('check')}Approve</button><button type="button" class="btn ghost sm danger" data-ua="reject" data-id="${x.id}">Reject</button>` : ''}
-        ${x.status === 'active' ? `<button type="button" class="btn ghost sm danger" data-ua="disable" data-id="${x.id}">Turn off</button>` : ''}${x.status === 'disabled' ? `<button type="button" class="btn ghost sm" data-ua="enable" data-id="${x.id}">Turn on</button>` : ''}</td></tr>`).join('')}</tbody></table></div>`
+        ${x.status === 'active' ? `<button type="button" class="btn ghost sm danger" data-ua="disable" data-id="${x.id}">Turn off</button>` : ''}<button type="button" class="btn ghost sm" data-ua="grant" data-id="${x.id}">Free days</button>${x.status === 'disabled' ? `<button type="button" class="btn ghost sm" data-ua="enable" data-id="${x.id}">Turn on</button>` : ''}</td></tr>`).join('')}</tbody></table></div>`
       : '<p class="empty">No partner registrations yet. Theatres register at #register.</p>'}
+    <h2 class="sec">Plan payments</h2>${receiptsTable(ctx.db.state.payments || [])}
     <p class="hint">Approving a “new theatre” request creates the theatre and its screens. The partner then sets up shows, prices, seat layouts and bank details.</p>`;
   host.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-ua]'); if (!b) return;
     const action = b.dataset.ua; let note = '';
     if (action === 'reject') { note = prompt('Why is this registration not approved? The partner sees this.') || ''; if (note.trim().length < 5) { toast('Add a short reason (5+ characters).'); return; } }
     if (action === 'disable' && !confirm('Turn off this partner account? They are signed out right away.')) return;
-    try { await ctx.db.userAction(b.dataset.id, action, { note }); await ctx.db.refresh(); toast({ approve: 'Approved. We emailed the partner.', reject: 'Registration rejected.', disable: 'Account turned off.', enable: 'Account turned on.' }[action]); ctx.route(); }
+    let days = 0;
+    if (action === 'grant') { days = +prompt('Add how many free days to this partner’s plan?', '30'); if (!(days > 0)) return; }
+    if (action === 'approve') { const x = list.find((y) => y.id === b.dataset.id); if (x && !x.sub && !confirm('This partner has not paid yet. Approve anyway?')) return; }
+    try { await ctx.db.userAction(b.dataset.id, action, { note, days }); await ctx.db.refresh(); toast({ approve: 'Approved. We emailed the partner.', reject: 'Registration rejected.', disable: 'Account turned off.', enable: 'Account turned on.', grant: `Added ${days} free days.` }[action]); ctx.route(); }
     catch (x) { toast(x.message); }
   });
 }
@@ -109,6 +115,7 @@ function overview(host, ctx) {
       <div class="tile"><small>Lumen revenue</small><b>${money(sum('platform'))}</b><span>Booking fees after offers, excl. GST</span></div>
       <div class="tile"><small>GST on fees</small><b>${money(sum('gst'))}</b><span>To be filed</span></div>
       <div class="tile"><small>Owed to theatres</small><b>${money(sum('theatre'))}</b><span>Tickets + food after refunds</span></div>
+      <div class="tile"><small>Partner plans</small><b>${money((ctx.db.state.payments || []).filter((x) => x.status === 'paid' && x.gateway !== 'demo').reduce((a, x) => a + x.amount, 0))}</b><span>${(ctx.db.state.payments || []).filter((x) => x.status === 'paid').length} payments${(ctx.db.state.payments || []).some((x) => x.gateway === 'demo') ? ' (demo ones not counted)' : ''}</span></div>
       <div class="tile"><small>Donations</small><b>${money(sum('donation'))}</b><span>For young musicians</span></div>
     </div>
     <h2 class="sec">Theatres</h2>
@@ -276,6 +283,7 @@ function offers(host, ctx) {
 /* ---------- fees ---------- */
 function fees(host, ctx) {
   const f = { conv: 18, gst: 0.18, holdMinutes: 5, demoCrowd: true, ...(ctx.db.state.fees || {}) };
+  const pb = { monthly: 399, yearlyList: 5000, yearlyOffPct: 20, graceDays: 7, ...(ctx.db.state.billing || {}) };
   host.innerHTML = `<section class="panel narrow"><h2>Fees & rules</h2>
     <form id="feeForm" class="pt-form" novalidate>
       <div class="af-grid"><label class="af"><span>Booking fee per ticket</span><span class="af-in"><small>₹</small><input type="number" name="conv" min="0" max="200" step="1" value="${f.conv}"></span></label>
@@ -283,7 +291,22 @@ function fees(host, ctx) {
       <label class="af"><span>How long seats are held during payment</span><span class="af-in"><input type="number" name="hold" min="2" max="15" value="${f.holdMinutes}"><small>minutes</small></span></label>
       <label class="af chk"><input type="checkbox" name="demoCrowd" ${f.demoCrowd ? 'checked' : ''}> Show demo crowd (simulated sales from the theatre counter and other apps)</label>
       <p class="muted">Customers will pay ${inr(Math.round(f.conv * (1 + f.gst)))} per ticket in fees (fee + GST), shown up front on every showtime.</p>
-      <p class="err" id="fErr"></p><button type="submit" class="btn primary">${icon('check')}Save</button></form></section>`;
+      <p class="err" id="fErr"></p><button type="submit" class="btn primary">${icon('check')}Save</button></form></section>
+    <section class="panel narrow"><h2>Theatre partner plans</h2>
+    <form id="planForm" class="pt-form" novalidate>
+      <div class="af-grid"><label class="af"><span>Monthly price</span><span class="af-in"><small>₹</small><input type="number" name="monthly" min="0" max="100000" value="${pb.monthly}"></span></label>
+        <label class="af"><span>Yearly price before discount</span><span class="af-in"><small>₹</small><input type="number" name="yearlyList" min="0" max="1000000" value="${pb.yearlyList}"></span></label></div>
+      <div class="af-grid"><label class="af"><span>Yearly discount</span><span class="af-in"><input type="number" name="yearlyOffPct" min="0" max="90" value="${pb.yearlyOffPct}"><small>%</small></span></label>
+        <label class="af"><span>Days before an unpaid theatre is hidden</span><span class="af-in"><input type="number" name="graceDays" min="0" max="60" value="${pb.graceDays}"><small>days</small></span></label></div>
+      <p class="muted" id="planSum"></p><p class="err" id="pErr"></p><button type="submit" class="btn primary">${icon('check')}Save plan prices</button></form></section>`;
+  const planSum = () => { const x = Object.fromEntries(new FormData($('#planForm')).entries()); const y = Math.round(+x.yearlyList * (1 - +x.yearlyOffPct / 100)); $('#planSum').textContent = `Partners pay ${rupees(+x.monthly)} a month, or ${rupees(y)} a year (save ${rupees(+x.yearlyList - y)}).`; };
+  planSum(); $('#planForm').addEventListener('input', planSum);
+  $('#planForm').addEventListener('submit', async (e) => {
+    e.preventDefault(); const x = Object.fromEntries(new FormData(e.target).entries());
+    const v = { monthly: Math.round(+x.monthly), yearlyList: Math.round(+x.yearlyList), yearlyOffPct: +x.yearlyOffPct, graceDays: Math.round(+x.graceDays) };
+    if (!(v.monthly >= 0 && v.yearlyList >= 0 && v.yearlyOffPct >= 0 && v.yearlyOffPct <= 90 && v.graceDays >= 0 && v.graceDays <= 60)) { $('#pErr').textContent = 'Check the numbers: discount 0–90%, grace 0–60 days.'; return; }
+    await save(ctx, 'billing', v, 'Plan prices saved. New payments use them.');
+  });
   $('#feeForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const x = Object.fromEntries(new FormData(e.target).entries());

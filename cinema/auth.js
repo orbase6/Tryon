@@ -3,6 +3,7 @@
 import { CITIES, theatresFor } from './data.js';
 import { HALLS } from './layout.js';
 import { icon, esc, $, toast, state, tx } from './ui.js';
+import { planCards, bindPlanCards, payPlan, rupees, fmtDay } from './billing.js';
 
 const L = (en, ta) => (state.lang === 'ta' && ta ? ta : en);
 const home = (u) => (u.role === 'admin' ? '#console' : '#partner');
@@ -47,6 +48,7 @@ export function loginView(view, ctx, next = '') {
     busy(f.querySelector('[type=submit]'), async () => {
       try { const u = await db.login(email, pw); toast(`Welcome, ${u.name}`); location.hash = next || home(u); }
       catch (err) {
+        if (err.data?.code === 'unpaid') { try { sessionStorage.setItem('lumen.pay', JSON.stringify({ email: err.data.email, payToken: err.data.payToken })); } catch (x) {} location.hash = 'register-pay'; return; }
         $('#lErr').innerHTML = esc(err.message) + (err.data?.code === 'unverified' ? ` <a href="#register-verify-${encodeURIComponent(email)}">Enter code</a>` : '');
       }
     });
@@ -99,7 +101,7 @@ export function registerView(view, ctx, verifyEmail = '') {
   const { db } = ctx;
   if (db.mode !== 'server') return needServer(view);
   const R = { name: '', email: '', phone: '', password: '', mode: 'existing', cityId: ctx.city(), theatreId: '', tName: '', tArea: '', screens: [{ name: 'Screen 1', hall: 'multiplex', fmt: '2D' }] };
-  const steps = (n) => `<ol class="steps">${['Your details', 'Your theatre', 'Verify email'].map((s, i) => `<li class="${i < n ? 'done' : i === n ? 'on' : ''}"><b>${i + 1}</b>${s}</li>`).join('')}</ol>`;
+  const steps = (n) => `<ol class="steps">${['Your details', 'Your theatre', 'Verify email', 'Plan & payment'].map((s, i) => `<li class="${i < n ? 'done' : i === n ? 'on' : ''}"><b>${i + 1}</b>${s}</li>`).join('')}</ol>`;
   const s1 = () => {
     view.innerHTML = shell(L('Register your theatre', 'உங்கள் திரையரங்கைப் பதிவு செய்'), L('Sell tickets on Lumen with your real seat layout and 3D seat views.', ''), `${steps(0)}
       <form id="g1" novalidate>${field('gName', L('Your name', 'உங்கள் பெயர்'), 'text', `autocomplete="name" value="${esc(R.name)}"`)}
@@ -169,13 +171,41 @@ export function registerView(view, ctx, verifyEmail = '') {
       if (!setErr(f, 'gOtp', /^\d{6}$/.test(otp) ? '' : 'Enter the 6-digit code.')) return;
       busy(f.querySelector('[type=submit]'), async () => {
         try {
-          await db.verify(email, otp);
-          view.innerHTML = shell(L('Thanks! You’re registered', 'நன்றி! பதிவு முடிந்தது'), '', `${steps(3)}<div class="notice">${icon('clock')}<span>Your email is verified. A Lumen admin will review your theatre, usually within one working day. We will email <b>${esc(email)}</b> when your account is approved, then you can sign in.</span></div><a class="btn primary wide" href="#home">Back to Lumen</a>`);
+          const r = await db.verify(email, otp);
+          s4(email, r.payToken);
         } catch (err) { $('#g3Err').textContent = err.message; }
       });
     });
     setTimeout(() => $('#gOtp')?.focus(), 30);
   };
+  // Step 4: choose a plan and pay. Then Lumen reviews the theatre.
+  const s4 = async (email, payToken) => {
+    let plans;
+    try { plans = await db.plans(); } catch (e) { view.innerHTML = shell('Could not load plans', esc(e.message), `<a class="btn primary wide" href="#register-pay">Try again</a>`); return; }
+    let chosen = 'yearly';
+    try { sessionStorage.setItem('lumen.pay', JSON.stringify({ email, payToken })); } catch (e) {}
+    view.innerHTML = shell(L('Choose your plan', 'உங்கள் திட்டத்தைத் தேர்வு செய்யுங்கள்'), L('Your email is verified. Pick a plan to list your theatre on Lumen.', ''), `${steps(3)}
+      ${planCards(plans, chosen)}<p class="err" id="g4Err" role="alert"></p>
+      <button type="button" class="btn primary wide" id="g4Pay"></button>
+      <p class="muted small center">You pay once now. Lumen then checks your theatre (usually within one working day) and emails you.</p>`);
+    const label = () => { const pl = plans[chosen]; $('#g4Pay').innerHTML = `${icon('lock')}Pay ${rupees(pl.amount)} · ${pl.label}`; };
+    bindPlanCards(view, (p) => { chosen = p; label(); }); label();
+    $('#g4Pay').addEventListener('click', (e) => busy(e.currentTarget, async () => {
+      try {
+        const r = await payPlan(db, chosen, payToken);
+        try { sessionStorage.removeItem('lumen.pay'); } catch (x) {}
+        const ok = r.status === 'active';
+        view.innerHTML = shell(L('Payment received', 'பணம் பெறப்பட்டது'), '', `${steps(4)}<div class="notice ok">${icon('check')}<span><b>${rupees(plans[chosen].amount)} paid</b> · ${plans[chosen].label} plan, valid until ${fmtDay(r.sub.until)}. A receipt was sent to <b>${esc(email)}</b>.</span></div>
+          <div class="notice">${icon('clock')}<span>${ok ? 'Your account is active. Sign in to set up your shows.' : 'A Lumen admin will now check your theatre, usually within one working day. We will email you when it’s approved, then you can sign in.'}</span></div>
+          <a class="btn primary wide" href="${ok ? '#login' : '#home'}">${ok ? 'Sign in' : 'Back to Lumen'}</a>`);
+      } catch (err) { $('#g4Err').textContent = err.message; }
+    }));
+  };
+  if (verifyEmail === '@pay') {
+    let saved = null; try { saved = JSON.parse(sessionStorage.getItem('lumen.pay') || 'null'); } catch (e) {}
+    if (saved && saved.payToken) s4(saved.email, saved.payToken); else { toast('Sign in to finish your payment.'); location.hash = 'login'; }
+    return;
+  }
   if (verifyEmail) s3(verifyEmail, null); else s1();
 }
 

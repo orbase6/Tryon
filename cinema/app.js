@@ -87,6 +87,7 @@ function route() {
   if (h === 'home') return homeView();
   if ((m = /^login(?:-(.+))?$/.exec(h))) return loginView(view, panelCtx(), m[1] ? '#' + decodeURIComponent(m[1]) : '');
   if (h === 'forgot') return forgotView(view, panelCtx());
+  if (h === 'register-pay') return registerView(view, panelCtx(), '@pay');
   if ((m = /^register(?:-verify-(.+))?$/.exec(h))) return registerView(view, panelCtx(), m[1] ? decodeURIComponent(m[1]) : '');
   if ((m = /^movie-([a-z0-9]+)$/.exec(h))) return movieView(m[1]);
   if ((m = /^shows-([a-z0-9]+)$/.exec(h))) return showsView(m[1]);

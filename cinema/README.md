@@ -61,6 +61,10 @@ One sign-in page for both roles. Passwords are hashed (scrypt), sessions are Htt
 
 Partner registration: your details → your theatre (already on Lumen, or a new theatre with its screens) → email code → Lumen admin approves → partner can sign in. Approving a new theatre creates it with its screens.
 
+**Partner plans:** ₹399 a month or ₹5,000 a year with 20% off (₹4,000, save ₹1,000). Prices and the discount are set in Console → Fees. New theatres pay right after verifying their email (registration step 4), before Lumen reviews them. Partners renew from **Plan & billing** (time is added after the current end date) and get an email receipt. If a plan runs out, the theatre is hidden from customers after 7 days (changeable). Admins can add free days. Payments go through Razorpay when `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` are set; otherwise they are marked demo.
+
+**Seat layout editor (for any theatre owner):** quick start with 4 answers (rows, seats per row, walkways, recliner rows, plus balcony rows), then tap seats to change them (seat, wheelchair, not for sale, empty, walkway), add/remove seats and rows, pick the seat type per row from a list, and set prices. Hall size and floor are chosen in plain words; exact metres are optional. The live preview shows the view score of every seat and a 3D walk-through.
+
 **Photos, banners, posters, trailers**
 - Partners upload a cover photo and up to 8 photos (shown on theatre cards and the theatre page), and banners for the home page or their theatre page with dates and an optional movie link. A live preview shows exactly how customers will see it. Every banner waits for Lumen review; the partner sees "Waiting for review / Live / Not approved (with reason) / Ended".
 - Admins upload each movie's poster (2:3), wide banner and trailer video, and set its **last day in cinemas**. Customers see "Last 3 days" from three days before; after that day the movie and its shows disappear.
@@ -148,6 +152,8 @@ server.js      Node server: static files, JSON API, logins, OTP email, uploads, 
 settings.example.env   copy to settings.env for admin + email settings
 auth.js        sign in, forgot password (email OTP), partner registration, account
 media.js       upload boxes, movie dropdown with posters, banner preview
+billing.js     partner plans, Razorpay / demo payment, receipts
+set-password.js  create an account or reset a password from the command line
 db.js          data layer: talks to server.js, or saves in the browser without it
 partner.js     theatre partner panel
 console.js     Lumen admin console

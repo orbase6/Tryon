@@ -76,7 +76,8 @@ export function theatresFor(cityId, { all = false } = {}) {
     th.cover = md.cover || null; th.photos = md.photos || [];
     th.km = LIVE.userLoc ? Math.round(kmBetween(LIVE.userLoc, th) * 10) / 10 : th.demoKm;
   }
-  return all ? list : list.filter((t) => t.status !== 'suspended');
+  // Hidden from customers: suspended by Lumen, or the owner's plan has run out
+  return all ? list : list.filter((t) => t.status !== 'suspended' && !LIVE.lapsed.has(t.id));
 }
 export function theatreById(id) {
   const m = /^c(\d+)t(\d+)$/.exec(id); if (!m) return null;
@@ -129,7 +130,7 @@ const BASE_MOVIES = MOVIES.slice();
 export const baseMovies = () => BASE_MOVIES;
 
 /* ---------- live data from the partner panel and admin console (see db.js) ---------- */
-export const LIVE = { theatres: {}, schedule: {}, demoCrowd: true, newTheatres: [], media: { movies: {}, theatres: {} }, banners: [], userLoc: null };
+export const LIVE = { theatres: {}, schedule: {}, demoCrowd: true, newTheatres: [], media: { movies: {}, theatres: {} }, banners: [], userLoc: null, lapsed: new Set() };
 const dayDiff = (iso) => { const [y, m, d] = iso.split('-').map(Number); return Math.round((new Date(y, m - 1, d, 12) - today()) / 86400000); };
 const ALL_MOVIES = [];
 export function applyLive(st) {
@@ -138,6 +139,7 @@ export function applyLive(st) {
   LIVE.newTheatres = Array.isArray(st.newTheatres) ? st.newTheatres : [];
   LIVE.media = { movies: {}, theatres: {}, ...(st.media || {}) };
   LIVE.banners = Array.isArray(st.banners) ? st.banners : [];
+  LIVE.lapsed = new Set(st.lapsed || []);
   const f = st.fees || {};
   CONV_FEE = f.conv ?? 18; GST = f.gst ?? 0.18; HOLD_MINUTES = f.holdMinutes ?? 5;
   FEE_PER_TICKET = Math.round(CONV_FEE * (1 + GST));

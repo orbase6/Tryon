@@ -3,9 +3,10 @@ import { CITIES, MOVIES, CLASS_META, movieById, isNowShowing, theatresFor, theat
 import { HALLS, layoutFor, pricesFor, customFor, hallName } from './layout.js';
 import { icon, esc, inr, $, $$, toast, clsName, tx, fmtDate, state, poster } from './ui.js';
 import { gate, openAccount } from './auth.js';
+import { planCards, bindPlanCards, payPlan, receiptsTable, rupees, fmtDay } from './billing.js';
 import { uploadBox, bindUpload, moviePicker, bindMoviePicker, bannerPreview, bannerState, STATUS } from './media.js';
 
-const TABS = [['overview', 'Overview'], ['shows', 'Shows'], ['prices', 'Prices'], ['layouts', 'Seat layouts'], ['media', 'Photos & banners'], ['kyc', 'Bank & KYC'], ['sales', 'Sales & payouts']];
+const TABS = [['overview', 'Overview'], ['shows', 'Shows'], ['prices', 'Prices'], ['layouts', 'Seat layouts'], ['media', 'Photos & banners'], ['kyc', 'Bank & KYC'], ['sales', 'Sales & payouts'], ['billing', 'Plan & billing']];
 const KYC_LABEL = { not_submitted: ['Not submitted', 'warn'], pending: ['Under review', 'warn'], verified: ['Verified', 'ok'], rejected: ['Rejected', 'bad'] };
 const money = (v) => '₹' + (Math.round(v * 100) / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 });
 const chip = ([label, tone]) => `<span class="st st-${tone}">${esc(label)}</span>`;
@@ -36,12 +37,51 @@ export async function partnerView(view, theatreId, tab, ctx) {
       <button type="button" class="btn ghost sm" id="acct">${icon('user')}<span class="hide-sm">Account</span></button></div>
     <div class="pt-head"><h1>${esc(th.name)}</h1><span class="muted">${esc(th.area)}, ${esc(cityOf(th).en)}</span>
       ${chip(th.status === 'suspended' ? ['Suspended by Lumen', 'bad'] : ['Live on Lumen', 'ok'])} ${chip(['KYC: ' + kyc[0], kyc[1]])}</div>
+    ${planNotice(u, th, tab)}
     <nav class="tabs" aria-label="Partner sections">${TABS.map(([k, l]) => `<a href="#partner-${th.id}-${k}" ${k === tab ? 'aria-current="page"' : ''}>${l}</a>`).join('')}</nav>
     <div id="pt"></div>`;
   $('#ptTheatre')?.addEventListener('change', (e) => { location.hash = `partner-${e.target.value}-${tab}`; });
   $('#acct').addEventListener('click', () => openAccount(ctx));
   const host = $('#pt');
-  ({ overview, shows, prices, layouts, media: mediaTab, kyc: kycTab, sales })[tab](host, th, ctx);
+  ({ overview, shows, prices, layouts, media: mediaTab, kyc: kycTab, sales, billing })[tab](host, th, ctx);
+}
+
+/* ---------- plan & billing ---------- */
+const daysLeft = (sub) => Math.ceil((sub.until - Date.now()) / 864e5);
+function planNotice(u, th, tab) {
+  if (u.role !== 'partner' || tab === 'billing') return '';
+  const link = `<a class="btn primary sm" href="#partner-${th.id}-billing">Renew plan</a>`;
+  if (!u.sub) return `<div class="notice">${icon('bell')}<span><b>Choose a plan</b> to keep selling tickets on Lumen.</span><a class="btn primary sm" href="#partner-${th.id}-billing">See plans</a></div>`;
+  const d = daysLeft(u.sub);
+  if (d < 0) return `<div class="notice bad">${icon('bell')}<span><b>Your plan ended on ${fmtDay(u.sub.until)}.</b> Customers stop seeing your theatre ${(-d) >= 7 ? 'now' : `in ${7 + d} days`}. Renew to keep selling.</span>${link}</div>`;
+  if (d <= 7) return `<div class="notice">${icon('clock')}<span><b>Your plan ends in ${d} day${d === 1 ? '' : 's'}</b> (${fmtDay(u.sub.until)}).</span>${link}</div>`;
+  return '';
+}
+async function billing(host, th, ctx) {
+  const u = ctx.db.me, sub = u.sub;
+  host.innerHTML = '<div class="spin"></div>';
+  let plans; try { plans = await ctx.db.plans(); } catch (e) { host.innerHTML = `<p class="err">${esc(e.message)}</p>`; return; }
+  if (!ctx.isCurrent()) return;
+  let chosen = sub?.plan === 'monthly' ? 'monthly' : 'yearly';
+  const d = sub ? daysLeft(sub) : null;
+  host.innerHTML = `<div class="pt-cols">
+    <section class="panel"><h2>Your plan</h2>
+      ${u.role === 'admin' ? '<p class="muted">Admins do not need a plan. This is what partners see.</p>' : sub ? `<div class="tiles"><div class="tile"><small>Plan</small><b>${sub.plan === 'yearly' ? 'Yearly' : sub.plan === 'monthly' ? 'Monthly' : 'Free (from Lumen)'}</b><span>${sub.amount ? rupees(sub.amount) : '—'}</span></div>
+        <div class="tile"><small>${d >= 0 ? 'Valid until' : 'Ended on'}</small><b>${fmtDay(sub.until)}</b><span>${d >= 0 ? `${d} day${d === 1 ? '' : 's'} left` : 'Renew to keep selling'}</span></div></div>`
+        : '<p class="muted">You do not have a plan yet.</p>'}
+      <p class="hint">Renewing adds time after your current end date, so you never lose days. If a plan runs out, customers stop seeing your theatre ${plans.graceDays} days later.</p>
+    </section>
+    <section class="panel"><h2>${sub ? 'Renew or switch' : 'Choose a plan'}</h2>${planCards(plans, chosen)}<p class="err" id="bErr"></p><button type="button" class="btn primary wide" id="bPay"></button></section>
+  </div>
+  <h2 class="sec">Payments & receipts</h2>${receiptsTable((ctx.db.state.payments || []).filter((x) => x.userId === u.id))}`;
+  const label = () => { const pl = plans[chosen]; $('#bPay').innerHTML = `${icon('lock')}Pay ${rupees(pl.amount)} · ${pl.label}`; };
+  bindPlanCards(host, (p) => { chosen = p; label(); }); label();
+  $('#bPay').disabled = u.role === 'admin';
+  $('#bPay').addEventListener('click', async (e) => {
+    const b = e.currentTarget; b.disabled = true;
+    try { const r = await payPlan(ctx.db, chosen); await ctx.db.refresh(); toast(`Paid. Your plan now runs until ${fmtDay(r.sub.until)}.`); ctx.route(); }
+    catch (err) { $('#bErr').textContent = err.message; b.disabled = false; }
+  });
 }
 
 /* ---------- photos & banners ---------- */

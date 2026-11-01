@@ -7,7 +7,7 @@ import { setCustomLayouts, setPriceOverrides } from './layout.js';
 
 const LS = 'lumen.db';
 const blank = () => ({ movies: [], hiddenMovies: [], schedule: {}, theatres: {}, offers: null, fees: null, layouts: {}, prices: {}, bookings: [],
-  newTheatres: [], media: { movies: {}, theatres: {} }, banners: [], me: null });
+  newTheatres: [], media: { movies: {}, theatres: {} }, banners: [], me: null, billing: null, lapsed: [], payments: [] });
 const clientId = (() => {
   try { let id = localStorage.getItem('lumen.client'); if (!id) { id = 'u' + Math.random().toString(36).slice(2, 10); localStorage.setItem('lumen.client', id); } return id; }
   catch (e) { return 'u' + Math.random().toString(36).slice(2, 10); }
@@ -65,6 +65,11 @@ export const db = {
   changePassword(current, password) { return api('auth/password', { method: 'POST', body: { current, password } }); },
   users() { return api('admin/users').then((r) => r.users); },
   userAction(id, action, extra = {}) { return api('admin/users/' + id, { method: 'POST', body: { action, ...extra } }); },
+
+  /* ---- partner plans (server only) ---- */
+  plans() { return api('billing/plans'); },
+  payOrder(plan, payToken) { return api('billing/order', { method: 'POST', body: { plan, payToken } }); },
+  payVerify(data) { return api('billing/verify', { method: 'POST', body: data }); },
 
   /* ---- media & banners (server only) ---- */
   // Upload one image or video file; returns 'uploads/<name>'

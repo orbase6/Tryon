@@ -34,6 +34,11 @@ You need: a GitHub account (you have it) and a hosting account. The steps below 
 | `SMTP_PASS` | Gmail **App password** (myaccount.google.com/apppasswords) |
 | `MAIL_FROM` | your Gmail address |
 
+| `RAZORPAY_KEY_ID` | from Razorpay Dashboard → Account & Settings → API Keys (after your KYC is approved) |
+| `RAZORPAY_KEY_SECRET` | same page; keep it secret |
+
+Without the two Razorpay keys, theatre plan payments run in **demo** mode (marked "no money taken"). With them, partners pay ₹399/month or ₹4,000/year by UPI, card or net banking through Razorpay, and the server checks Razorpay's signature before activating the plan. Start with Razorpay **test** keys, try a payment, then switch to live keys.
+
 Do not set `PORT` (Render sets it). Keep `DEMO_MODE` unset until real payments work.
 
 6. **Create Web Service.** After 1–2 minutes you get a link like `https://lumen-xxxx.onrender.com`.
