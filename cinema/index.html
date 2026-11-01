@@ -4,6 +4,13 @@
 <title>Lumen Cinemas</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22%3E%3Crect width=%2224%22 height=%2224%22 rx=%225%22 fill=%22%2314161f%22/%3E%3Cpath d=%22M4 8.5a1.8 1.8 0 0 0 1.8-1.8h12.4A1.8 1.8 0 0 0 20 8.5v1.7a1.8 1.8 0 0 0 0 3.6v1.7a1.8 1.8 0 0 0-1.8 1.8H5.8A1.8 1.8 0 0 0 4 15.5v-1.7a1.8 1.8 0 0 0 0-3.6z%22 fill=%22%23ffc72c%22/%3E%3Cpath d=%22M14 7.5v9%22 stroke=%22%2314161f%22 stroke-width=%221.4%22 stroke-dasharray=%221.6 1.4%22/%3E%3C/svg%3E">
 <meta name="theme-color" content="#14161f">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Lumen">
+<meta name="description" content="Book movie tickets and see the view from your seat in 3D before you book.">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -23,6 +30,8 @@
   </div>
   <nav class="cats" id="cats" aria-label="Categories"></nav>
 </header>
+
+<div class="demo-bar" id="demoBar" hidden></div>
 
 <main id="view" class="view"><div class="boot">Loading…</div></main>
 

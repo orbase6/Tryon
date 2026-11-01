@@ -806,3 +806,5 @@ h1, h2, h3 { text-wrap: balance; margin: 0; }
 .banner.sm, .bp-banner { height: auto; aspect-ratio: 8 / 3; max-height: none; }
 .slide { max-height: 460px; }
 .fix-steps { margin: 0; padding-left: 20px; display: grid; gap: 8px; font-size: 14.5px; }
+.demo-bar { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 7px 16px; font-size: 13px; font-weight: 600; text-align: center; background: var(--yel); color: var(--ink); }
+.demo-bar svg.i { width: 16px; height: 16px; flex: none; }

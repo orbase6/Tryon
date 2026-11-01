@@ -28,6 +28,7 @@ async function api(path, opts = {}) {
 
 export const db = {
   mode: 'local',
+  demo: true, // shows the "demo, no real payment" notice
   client: clientId,
   state: blank(),
   get me() { return this.state.me || null; },
@@ -35,6 +36,7 @@ export const db = {
     try {
       // config.json says { server: false } on static hosting; server.js answers { server: true }
       const cfg = await fetch('config.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
+      this.demo = cfg.demo !== false;
       if (cfg.server) { this.state = { ...blank(), ...(await api('state?client=' + this.client)) }; this.mode = 'server'; }
     } catch (e) { /* server unreachable: stay local */ }
     if (this.mode === 'local') {

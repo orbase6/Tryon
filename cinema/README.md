@@ -31,6 +31,10 @@ node server.js            # Node 18+, nothing to install   (Windows: double-clic
 
 Voice input needs Chrome or Edge on `localhost`/`127.0.0.1` (or HTTPS). Typing works everywhere.
 
+## Put it online / install as an app
+
+See **[DEPLOY.md](DEPLOY.md)**: step-by-step hosting on Render with https, plus how people install Lumen as an app on Android, iPhone and Windows (it is a Progressive Web App: `manifest.webmanifest`, `sw.js`, `icons/`). A yellow "Demo version" bar stays on until real payments work (`DEMO_MODE=0` hides it).
+
 ## What's inside
 
 | Area | What the user gets |

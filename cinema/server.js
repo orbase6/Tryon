@@ -5,7 +5,10 @@
 // theatre partners, with hashed passwords, sessions, email OTP for verification and password reset.
 //
 // Optional environment variables:
-//   PORT, HOST                         where to listen (default 127.0.0.1:5500)
+//   PORT, HOST                         where to listen (default 127.0.0.1:5500; use HOST=0.0.0.0 on a server)
+//   DATA_DIR                           where db.json and uploads live (default ./data)
+//   FORCE_HTTPS=1                      redirect http to https behind a hosting proxy
+//   DEMO_MODE=0                        hide the "demo, no real payment" notice (only once real payments work)
 //   ADMIN_EMAIL, ADMIN_PASSWORD        first admin account (otherwise one is created and printed once)
 //   SMTP_HOST, SMTP_PORT (465 or 587), SMTP_USER, SMTP_PASS, MAIL_FROM   to send OTP emails
 //   (SMTP_SECURE=1 forces direct TLS on a port other than 465)
@@ -28,12 +31,12 @@ try {
 } catch (e) { /* no settings file */ }
 const PORT = +process.env.PORT || 5500;
 const HOST = process.env.HOST || '127.0.0.1';
-const DATA = path.join(ROOT, 'data');
+const DATA = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(ROOT, 'data');
 const DB_FILE = path.join(DATA, 'db.json');
 const UPLOADS = path.join(DATA, 'uploads');
 const SECTIONS = ['movies', 'hiddenMovies', 'schedule', 'theatres', 'offers', 'fees', 'layouts', 'prices'];
 const PARTNER_SECTIONS = ['schedule', 'layouts', 'prices']; // keyed by screen id
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.mp4': 'video/mp4', '.webm': 'video/webm', '.ico': 'image/x-icon', '.md': 'text/plain; charset=utf-8', '.bat': 'text/plain; charset=utf-8', '.sh': 'text/plain; charset=utf-8' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.mp4': 'video/mp4', '.webm': 'video/webm', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json', '.md': 'text/plain; charset=utf-8', '.bat': 'text/plain; charset=utf-8', '.sh': 'text/plain; charset=utf-8' };
 const DAY = 864e5;
 
 /* ---------------- storage ---------------- */
@@ -477,7 +480,9 @@ http.createServer(async (req, res) => {
   res.setHeader('x-frame-options', 'SAMEORIGIN'); res.setHeader('referrer-policy', 'same-origin');
   try {
     if (url.pathname.startsWith('/api/')) return await apiRoute(req, res, url);
-    if (url.pathname === '/config.json') return send(res, 200, { server: true });
+    // Behind a hosting proxy: send http visitors to https
+    if (process.env.FORCE_HTTPS === '1' && req.headers['x-forwarded-proto'] === 'http') { res.writeHead(301, { location: 'https://' + req.headers.host + req.url }); return res.end(); }
+    if (url.pathname === '/config.json') return send(res, 200, { server: true, demo: process.env.DEMO_MODE !== '0' });
     const rel = decodeURIComponent(url.pathname);
     if (rel.startsWith('/uploads/')) {
       const f = path.normalize(path.join(UPLOADS, rel.slice(9)));

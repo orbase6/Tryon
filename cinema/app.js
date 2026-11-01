@@ -995,4 +995,14 @@ document.addEventListener('click', (e) => {
 addEventListener('keydown', (e) => { if (e.key !== 'Escape') return; if (!$('#viewer').hidden) closeViewer(); else if (!$('#sheet').hidden) closeSheet(); else if (agent.isOpen()) agent.close(); });
 addEventListener('hashchange', route);
 await db.init();
+if (db.demo) {
+  const bar = $('#demoBar');
+  bar.innerHTML = `${icon('bell')}<span>${state.lang === 'ta' ? 'இது மாதிரி தளம்: டிக்கெட்டுகள் உண்மையானவை அல்ல, பணம் எடுக்கப்படாது.' : 'Demo version: tickets are not real and no money is charged.'}</span>`;
+  bar.hidden = false;
+}
 route();
+// Installable app (Android, iPhone, Windows): offline support and home-screen icon
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1') && !/claude|claudeusercontent/.test(location.hostname)) {
+  const reg = () => navigator.serviceWorker.register('sw.js').catch(() => {});
+  if (document.readyState === 'complete') reg(); else addEventListener('load', reg);
+}
