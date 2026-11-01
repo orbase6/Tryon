@@ -489,7 +489,7 @@ http.createServer(async (req, res) => {
     serveFile(req, res, file, 'no-cache');
   } catch (e) { if (!res.headersSent) send(res, e.status || 400, { error: e.message }); }
 }).on('error', (e) => {
-  if (e.code === 'EADDRINUSE') console.log(`\n  Port ${PORT} is already used by another program (VS Code Live Server or "python -m http.server"?).\n  Stop it first (Live Server: click "Port: ${PORT}" in VS Code's bottom bar; Python: press Ctrl+C in its window),\n  then run start.bat again. Or use another port: set PORT=5600 in settings.env.\n`);
+  if (e.code === 'EADDRINUSE') console.log(`\n  Port ${PORT} is already used by another program (VS Code Live Server or "python -m http.server"?).\n  Stop it first (Live Server: click "Port: ${PORT}" in VS Code's bottom bar; Python: press Ctrl+C in its window),\n  then run start.bat again. Or use another port: set PORT=5600 in settings.env.\n  Windows PowerShell, to stop whatever holds the port:\n    Get-NetTCPConnection -LocalPort ${PORT} -State Listen | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }\n`);
   else console.log(e);
   process.exit(1);
 }).listen(PORT, HOST, () => console.log(`Lumen running on http://${HOST}:${PORT}  (data in ${DB_FILE})${process.env.SMTP_HOST ? '' : '\n  Email is not set up: OTP codes will be printed here.'}`));
