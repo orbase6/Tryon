@@ -1,0 +1,23 @@
+{
+ "rules": {
+  "sentences": "32/40",
+  "fields": "93/102",
+  "fieldAcc": "91.2%",
+  "fails": [
+   "kalaam padam innaikku night 3 per → {\"count\":3,\"dk\":\"20261101\",\"part\":\"night\"}",
+   "orbit 9 starline la naalu ticket → {\"movieId\":\"orbit9\",\"count\":9,\"theatreId\":\"c0t1\"}",
+   "2 seats for neon kadl tomorow → {\"movieId\":\"neonkadal\",\"count\":2}",
+   "kaalm 3 tickts evenig → {\"count\":3}",
+   "remind me when agni paravai releases → {\"movieId\":\"agniparavai\"}",
+   "starfall eppo release → {\"movieId\":\"starfall\"}",
+   "en booking cancel pannu → {}",
+   "vanakkam → {}"
+  ]
+ },
+ "model": {
+  "sentences": "40/40",
+  "fields": "102/102",
+  "fieldAcc": "100.0%",
+  "fails": []
+ }
+}

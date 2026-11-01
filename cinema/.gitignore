@@ -1,0 +1,4 @@
+nlu/data.json
+nlu/parity.json
+nlu/model.pt
+nlu/__pycache__/
