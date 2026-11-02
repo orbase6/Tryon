@@ -240,7 +240,7 @@ export function gate(view, ctx, role, back) {
     return null;
   }
   if (role === 'admin' && u.role !== 'admin') {
-    view.innerHTML = shell('This page is for Lumen admins', `You are signed in as ${esc(u.email)} (theatre partner).`, `<a class="btn primary wide" href="#partner">Open my partner panel</a>`);
+    view.innerHTML = shell('This page is for Lumen admins', `You are signed in as ${esc(u.email)} (theatre partner).`, `<a class="btn primary wide" href="#partner">Open Lumen Business</a>`);
     return null;
   }
   return u;
@@ -250,7 +250,7 @@ export function gate(view, ctx, role, back) {
 export function openAccount(ctx) {
   const { db } = ctx; const u = db.me; if (!u) { location.hash = 'login'; return; }
   ctx.openSheet(`<h2 class="sh-t">${icon('user')}${esc(u.name)}</h2><p class="muted">${esc(u.email)} · ${u.role === 'admin' ? 'Lumen admin' : 'Theatre partner'}</p>
-    <div class="acct-links"><a class="btn ghost" href="${home(u)}">${icon('grid')}${u.role === 'admin' ? 'Admin console' : 'Partner panel'}</a>${u.role === 'admin' ? `<a class="btn ghost" href="#partner">${icon('ticket')}Partner panel</a>` : ''}</div>
+    <div class="acct-links"><a class="btn ghost" href="${home(u)}">${icon('grid')}${u.role === 'admin' ? 'Admin console' : 'Lumen Business'}</a>${u.role === 'admin' ? `<a class="btn ghost" href="#partner">${icon('ticket')}Lumen Business</a>` : ''}</div>
     <form id="cp" novalidate><h3>Change password</h3>${pwField('cpCur', 'Current password', 'current-password')}${pwField('cpNew', 'New password', 'new-password')}<small class="muted">${pwHint()}</small>
     <p class="err" id="cpErr" role="alert"></p><button class="btn ghost" type="submit">${icon('lock')}Change password</button></form>
     <button type="button" class="btn danger wide" id="logout">${icon('logout')}Sign out</button>`, (sh) => {

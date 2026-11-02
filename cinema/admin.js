@@ -259,7 +259,7 @@ export function adminView(view, screenId, ctx) {
     prices();
     lay = buildLayout(spec, `preview:${screenId}:${++version}`);
     map?.destroy();
-    map = mountMap($('#adMap'), lay, { booked: new Set(), selected: new Set(), prices: spec.prices, onTap: tapMap });
+    $('#adMap').dataset.edit = '1'; map = mountMap($('#adMap'), lay, { booked: new Set(), selected: new Set(), prices: spec.prices, onTap: tapMap });
     map.setMode('view');
     const byCls = {}; lay.seats.forEach((s) => { if (!s.disabled) byCls[s.cls] = (byCls[s.cls] || 0) + 1; });
     const live = lay.seats.filter((s) => !s.disabled);

@@ -1,12 +1,12 @@
 // Theatre partner panel: what a theatre owner uses to run their screens on Lumen.
 import { CITIES, MOVIES, CLASS_META, movieById, isNowShowing, theatresFor, theatreById, showsFor, today, addDays, dayKey, fromKey, hmLabel, releaseDate, screenDay, bookingMoney, showById } from './data.js';
-import { HALLS, layoutFor, pricesFor, customFor, hallName } from './layout.js';
+import { HALLS, layoutFor, pricesFor, customFor, hallName, counterFor } from './layout.js';
 import { icon, esc, inr, $, $$, toast, clsName, tx, fmtDate, state, poster } from './ui.js';
 import { gate, openAccount } from './auth.js';
 import { planCards, bindPlanCards, payPlan, receiptsTable, rupees, fmtDay } from './billing.js';
 import { uploadBox, bindUpload, moviePicker, bindMoviePicker, bannerPreview, bannerState, STATUS } from './media.js';
 
-const TABS = [['overview', 'Overview'], ['shows', 'Shows'], ['prices', 'Prices'], ['layouts', 'Seat layouts'], ['media', 'Photos & banners'], ['kyc', 'Bank & KYC'], ['sales', 'Sales & payouts'], ['billing', 'Plan & billing'], ['team', 'Team']];
+const TABS = [['overview', 'Overview'], ['shows', 'Shows'], ['prices', 'Prices & online'], ['layouts', 'Seat layouts'], ['media', 'Photos & banners'], ['kyc', 'Bank & KYC'], ['sales', 'Sales & payouts'], ['billing', 'Plan & billing'], ['team', 'Team']];
 const OWNER_ONLY = ['kyc', 'billing', 'team'];
 const KYC_LABEL = { not_submitted: ['Not submitted', 'warn'], pending: ['Under review', 'warn'], verified: ['Verified', 'ok'], rejected: ['Rejected', 'bad'] };
 const money = (v) => '₹' + (Math.round(v * 100) / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 });
@@ -22,7 +22,7 @@ export async function partnerView(view, theatreId, tab, ctx) {
   const u = ctx.db.me; if (!u) { location.replace('#login-partner'); return; }
   const mine = u.role === 'admin' ? CITIES.flatMap((c) => theatresFor(c.id, { all: true })) : (u.theatreIds || []).map(theatreById).filter(Boolean);
   if (!mine.length) {
-    view.innerHTML = `<div class="topbar"><a class="iconbtn" href="#home" aria-label="Back">${icon('back')}</a><div class="sb-t"><b>Partner panel</b><small>${esc(u.email)}</small></div><button type="button" class="btn ghost sm" id="acct">${icon('user')}Account</button></div>
+    view.innerHTML = `<div class="topbar"><a class="iconbtn" href="#home" aria-label="Back">${icon('back')}</a><div class="sb-t"><b>Lumen Business</b><small>${esc(u.email)}</small></div><button type="button" class="btn ghost sm" id="acct">${icon('user')}Account</button></div>
       <div class="notice">${icon('clock')}<span>No theatre is linked to your account yet. Lumen links it when your registration is approved.</span></div>`;
     $('#acct').addEventListener('click', () => openAccount(ctx)); return;
   }
@@ -34,7 +34,7 @@ export async function partnerView(view, theatreId, tab, ctx) {
   const groups = CITIES.map((c) => [c, mine.filter((t) => t.cityId === c.id)]).filter(([, l]) => l.length);
   view.innerHTML = `
     <div class="topbar"><a class="iconbtn" href="#home" aria-label="Back">${icon('back')}</a>
-      <div class="sb-t"><b>Partner panel</b><small>${esc(u.name)} · ${esc(u.email)}${u.role === 'admin' ? ' · admin' : ''}</small></div>
+      <div class="sb-t"><b>Lumen Business</b><small>${esc(u.name)} · ${esc(u.email)}${u.role === 'admin' ? ' · admin' : ''}</small></div>
       ${mine.length > 1 ? `<label class="dd"><select id="ptTheatre" aria-label="Theatre">${groups.map(([c, l]) => `<optgroup label="${esc(c.en)}">${l.map((t2) => `<option value="${t2.id}" ${t2.id === th.id ? 'selected' : ''}>${esc(t2.name)} · ${esc(t2.area)}</option>`).join('')}</optgroup>`).join('')}</select></label>` : ''}
       <button type="button" class="btn ghost sm" id="acct">${icon('user')}<span class="hide-sm">Account</span></button></div>
     <div class="pt-head"><h1>${esc(th.name)}</h1><span class="muted">${esc(th.area)}, ${esc(cityOf(th).en)}</span>
@@ -312,20 +312,37 @@ function shows(host, th, ctx) {
 const toMin = (hm) => +hm.slice(0, 2) * 60 + +hm.slice(2);
 const endOf = (hm, mins) => { const t = (toMin(hm) + mins) % 1440; return String(Math.floor(t / 60)).padStart(2, '0') + String(t % 60).padStart(2, '0'); };
 
-/* ---------- prices ---------- */
+/* ---------- prices & online selling ---------- */
+// One card per screen. Every seat section has a price and a big Yes / No switch for
+// "Sell online". "No" keeps those rows for the theatre's own counter (e.g. only the balcony online).
 function prices(host, th, ctx) {
   host.innerHTML = `<div class="pt-cols">${th.screens.map((sc) => {
-    const pr = pricesFor(sc.id, sc.hall), lay = layoutFor(sc.id, sc.hall);
+    const pr = pricesFor(sc.id, sc.hall), lay = layoutFor(sc.id, sc.hall), off = new Set(counterFor(sc.id));
     return `<section class="panel"><h2>${esc(sc.name)} · ${esc(sc.fmt)}</h2><p class="muted">${esc(tx(hallName(sc.id, sc.hall)))} · ${lay.seats.length} seats</p>
-      <form class="pt-form" data-sc="${sc.id}" novalidate><div class="af-grid">${Object.entries(pr).map(([k, v]) => `<label class="af"><span><i class="sw" style="background:${CLASS_META[k]?.color}"></i>${esc(clsName(k))} · ${lay.seats.filter((s) => s.cls === k).length} seats</span><span class="af-in"><small>₹</small><input type="number" name="${k}" min="0" max="5000" step="5" value="${v}" required></span></label>`).join('')}</div>
-      <p class="err"></p><button type="submit" class="btn primary sm">${icon('check')}Save prices</button></form></section>`;
-  }).join('')}</div><p class="hint">Customers see these prices plus Lumen’s booking fee, shown up front.</p>`;
+      <form class="pt-form" data-sc="${sc.id}" novalidate>${Object.entries(pr).map(([k, v]) => {
+        const rows = [...new Set(lay.seats.filter((s) => s.cls === k).map((s) => s.row))];
+        return `<div class="sell-row"><div class="sell-h"><i class="sw" style="background:${CLASS_META[k]?.color}"></i><b>${esc(clsName(k))}</b><small>Rows ${esc(rows.join(', '))} · ${lay.seats.filter((s) => s.cls === k).length} seats</small></div>
+          <label class="af-in big"><small>₹</small><input type="number" name="${k}" min="0" max="5000" step="5" value="${v}" required aria-label="${esc(clsName(k))} price"></label>
+          <div class="sell-yn" role="radiogroup" aria-label="Sell ${esc(clsName(k))} online"><span>Sell online?</span>
+            <button type="button" role="radio" data-cls="${k}" data-on="1" aria-checked="${!off.has(k)}">${icon('check')}Yes</button>
+            <button type="button" role="radio" data-cls="${k}" data-on="0" aria-checked="${off.has(k)}">${icon('x')}No, counter only</button></div></div>`;
+      }).join('')}
+      <p class="err"></p><button type="submit" class="btn primary">${icon('check')}Save</button></form></section>`;
+  }).join('')}</div><p class="hint">Customers see these prices plus Lumen’s booking fee, shown up front. Sections set to “counter only” show as greyed out in the app, and nobody can book them online.</p>`;
+  host.addEventListener('click', (e) => {
+    const b = e.target.closest('.sell-yn button'); if (!b) return;
+    b.parentElement.querySelectorAll('button').forEach((x) => x.setAttribute('aria-checked', String(x === b)));
+  });
   host.querySelectorAll('form').forEach((f) => f.addEventListener('submit', async (e) => {
     e.preventDefault();
     const vals = {}; let bad = false;
     f.querySelectorAll('input').forEach((i) => { const v = +i.value; if (!(v >= 0 && v <= 5000)) bad = true; vals[i.name] = Math.round(v); });
     if (bad) { f.querySelector('.err').textContent = 'Prices must be between ₹0 and ₹5,000.'; return; }
-    try { await ctx.db.put('prices', { ...ctx.db.state.prices, [f.dataset.sc]: vals }); toast('Prices saved. New bookings use them right away.'); f.querySelector('.err').textContent = ''; }
+    const off = [...f.querySelectorAll('.sell-yn [data-on="0"][aria-checked="true"]')].map((x) => x.dataset.cls);
+    if (off.length === Object.keys(vals).length) { f.querySelector('.err').textContent = 'At least one section must be sold online. Otherwise remove this screen’s shows.'; return; }
+    const sc = th.screens.find((x) => x.id === f.dataset.sc), lay = layoutFor(sc.id, sc.hall);
+    if (off.length) { vals._counter = off; vals._counterRows = [...new Set(lay.seats.filter((s) => off.includes(s.cls)).map((s) => s.row))]; }
+    try { await ctx.db.put('prices', { ...ctx.db.state.prices, [f.dataset.sc]: vals }); toast(off.length ? `Saved. ${off.map(clsName).join(', ')}: counter only.` : 'Saved. All sections are sold online.'); f.querySelector('.err').textContent = ''; }
     catch (err) { toast(err.message || 'Could not save. Check the connection and try again.'); }
   }));
 }

@@ -69,6 +69,9 @@ export function pricesFor(screenId, hall) {
   const c = custom.get(screenId), base = (c && c.prices) || HALLS[hall].prices, ov = priceOv.get(screenId) || {};
   const out = {}; for (const k of Object.keys(base)) out[k] = ov[k] ?? base[k]; return out;
 }
+// Seat sections the theatre sells only at its own counter (not online)
+export const counterFor = (screenId) => (priceOv.get(screenId) || {})._counter || [];
+export const counterOf = (show) => counterFor(screenIdOf(show));
 export const layoutOf = (show) => layoutFor(screenIdOf(show), show.hall);
 export const pricesOf = (show) => pricesFor(screenIdOf(show), show.hall);
 export const hallName = (screenId, hall) => (custom.get(screenId)?.name ? { en: custom.get(screenId).name, ta: custom.get(screenId).name } : HALLS[hall]);

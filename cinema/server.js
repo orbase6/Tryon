@@ -34,16 +34,16 @@ const HOST = process.env.HOST || '127.0.0.1';
 const DATA = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(ROOT, 'data');
 const DB_FILE = path.join(DATA, 'db.json');
 const UPLOADS = path.join(DATA, 'uploads');
-const SECTIONS = ['movies', 'hiddenMovies', 'schedule', 'theatres', 'offers', 'fees', 'layouts', 'prices', 'billing'];
+const SECTIONS = ['movies', 'hiddenMovies', 'schedule', 'theatres', 'offers', 'fees', 'layouts', 'prices', 'billing', 'events'];
 const PARTNER_SECTIONS = ['schedule', 'layouts', 'prices']; // keyed by screen id
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.mp4': 'video/mp4', '.webm': 'video/webm', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json', '.md': 'text/plain; charset=utf-8', '.bat': 'text/plain; charset=utf-8', '.sh': 'text/plain; charset=utf-8' };
 const DAY = 864e5;
 
 /* ---------------- storage ---------------- */
 let db = { movies: [], hiddenMovies: [], schedule: {}, theatres: {}, offers: null, fees: null, layouts: {}, prices: {}, bookings: [],
-  users: [], sessions: {}, newTheatres: [], media: { movies: {}, theatres: {} }, banners: [], payments: [], billing: null, settings: {}, messages: [], cities: [], mediaRequests: [] };
+  users: [], sessions: {}, newTheatres: [], media: { movies: {}, theatres: {} }, banners: [], payments: [], billing: null, settings: {}, messages: [], cities: [], mediaRequests: [], reviews: [], giftcards: [], subscribers: [], events: [] };
 try { db = { ...db, ...JSON.parse(fs.readFileSync(DB_FILE, 'utf8')) }; } catch (e) { /* first run */ }
-db.payments ||= []; db.mediaRequests ||= []; db.settings ||= {}; db.messages ||= []; db.cities ||= [];
+db.payments ||= []; db.mediaRequests ||= []; db.reviews ||= []; db.giftcards ||= []; db.subscribers ||= []; db.events ||= []; db.settings ||= {}; db.messages ||= []; db.cities ||= [];
 db.media ||= { movies: {}, theatres: {} }; db.media.movies ||= {}; db.media.theatres ||= {};
 let saveTimer = null;
 function save() {
@@ -282,6 +282,12 @@ function heldByOthers(show, client) {
 
 /* ---------------- helpers ---------------- */
 function send(res, code, obj) { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(obj)); }
+// Rows a theatre sells only at its own counter (owner switched "Sell online" off for that section)
+function counterSeats(showId, seats) {
+  const mm = /^(c\d+t\d+s\d+)d/.exec(String(showId || '')); if (!mm) return [];
+  const rows = new Set(((db.prices || {})[mm[1]] || {})._counterRows || []);
+  return rows.size ? (seats || []).filter((x) => rows.has(String(x).replace(/\d+$/, ''))) : [];
+}
 function body(req) {
   return new Promise((resolve, reject) => {
     let s = ''; req.on('data', (c) => { s += c; if (s.length > 5e6) { reject(Object.assign(new Error('Request too large'), { status: 413 })); req.destroy(); } });
@@ -304,7 +310,7 @@ function stateFor(u, client) {
   else bookings = db.bookings.filter((b) => mine(b) || (u && u.role === 'partner' && b.theatreId && ownsTheatre(u, b.theatreId)))
     .map((b) => (mine(b) ? b : { ...b, contact: b.contact ? { email: b.contact.email.replace(/^(.).*(@.*)$/, '$1•••$2'), phone: b.contact.phone ? '•••••' + b.contact.phone.slice(-4) : '' } : null }));
   return { movies: db.movies, hiddenMovies: db.hiddenMovies, schedule: db.schedule, theatres, offers: db.offers, fees: db.fees, layouts: db.layouts, prices: db.prices,
-    newTheatres: db.newTheatres, media: db.media, banners, bookings, me: publicUser(u), billing: db.billing, lapsed: lapsedTheatres(),
+    newTheatres: db.newTheatres, media: db.media, banners, bookings, events: db.events, me: publicUser(u), billing: db.billing, lapsed: lapsedTheatres(),
     mediaRequests: u && u.role === 'admin' ? db.mediaRequests.filter((x) => x.status === 'pending') : u && u.role === 'partner' ? db.mediaRequests.filter((x) => x.by === u.id).slice(0, 30) : [],
     payments: u && u.role !== 'customer' ? db.payments.filter((x) => u.role === 'admin' || x.userId === ownerOf(u).id) : [], cities: db.cities,
     contact: { email: cfg('contact', 'email'), phone: cfg('contact', 'phone'), company: cfg('contact', 'company'), address: cfg('contact', 'address') },
@@ -503,6 +509,63 @@ async function apiRoute(req, res, url) {
     save(); return send(res, 200, { user: publicUser(u) });
   }
 
+  /* ---- reviews (only people who booked the movie) ---- */
+  if (p === 'reviews' && m === 'GET') {
+    const mv = url.searchParams.get('movie');
+    const list = db.reviews.filter((r) => r.movieId === mv && !r.hidden).sort((a, b) => b.at - a.at);
+    const tags = {}; for (const r of list) for (const t of r.tags || []) tags[t] = (tags[t] || 0) + 1;
+    return send(res, 200, { count: list.length, avg: list.length ? Math.round(list.reduce((a, r) => a + r.rating, 0) / list.length * 10) / 10 : null, tags,
+      reviews: list.slice(0, 40).map((r) => ({ id: r.id, name: r.name, rating: r.rating, tags: r.tags, text: r.text, at: r.at, likes: (r.likes || []).length })) });
+  }
+  if (p === 'reviews' && m === 'POST') {
+    if (!need()) return;
+    const b = await body(req); const rating = Math.round(+b.rating);
+    if (!(rating >= 1 && rating <= 10)) return send(res, 400, { error: 'Pick a rating from 1 to 10.' });
+    const booked = db.bookings.some((x) => !x.cancelled && (x.userId === u.id || (b.client && x.client === b.client)) && x.movieId === b.movieId);
+    if (!booked) return send(res, 403, { error: 'You can review a movie after you book it on Lumen.' });
+    const ALLOWED = ['Blockbuster', 'GreatActing', 'AwesomeStory', 'GreatMusic', 'MustWatch', 'FamilyFriendly', 'Slow', 'Average'];
+    const rec = db.reviews.find((r) => r.movieId === b.movieId && r.userId === u.id) || (db.reviews.push({ id: uid(6), movieId: b.movieId, userId: u.id, likes: [] }), db.reviews[db.reviews.length - 1]);
+    Object.assign(rec, { name: (u.name || 'Lumen user').slice(0, 40), rating, tags: (Array.isArray(b.tags) ? b.tags : []).filter((t) => ALLOWED.includes(t)).slice(0, 3), text: String(b.text || '').trim().slice(0, 600), at: Date.now() });
+    save(); return send(res, 200, { ok: true });
+  }
+
+  /* ---- gift cards ---- */
+  if (p === 'giftcards' && m === 'POST') {
+    const b = await body(req); const amount = Math.round(+b.amount);
+    if (limited('gift|' + ip(req), 10, 60 * 60000)) return send(res, 429, { error: 'Too many gift cards. Try again later.' });
+    if (!(amount >= 100 && amount <= 10000)) return send(res, 400, { error: 'Gift cards are ₹100 to ₹10,000.' });
+    const toEmail = normEmail(b.toEmail); if (!emailOk(toEmail)) return send(res, 400, { error: 'Enter the receiver’s email.' });
+    if (String(b.fromName || '').trim().length < 2) return send(res, 400, { error: 'Enter your name.' });
+    const code = 'LG' + crypto.randomBytes(6).toString('hex').toUpperCase();
+    const g = { code, design: String(b.design || 'movie').slice(0, 20), amount, balance: amount, toName: String(b.toName || '').slice(0, 40), toEmail, fromName: String(b.fromName).trim().slice(0, 40), message: String(b.message || '').slice(0, 200), at: Date.now(), client: b.client || null, userId: u?.id || null, valid: Date.now() + 365 * DAY };
+    db.giftcards.push(g); save();
+    sendMail(toEmail, `${g.fromName} sent you a Lumen gift card`, `Hi ${g.toName || ''},\r\n\r\n${g.fromName} sent you a Lumen gift card worth Rs ${amount}.${g.message ? '\r\n\r\n"' + g.message + '"' : ''}\r\n\r\nCode: ${code}\r\nUse it at payment (Gift voucher). Valid for 1 year.\r\n\r\nLumen Cinemas`).catch(() => {});
+    return send(res, 200, { code, amount, valid: g.valid });
+  }
+  if ((mm = /^giftcards\/([A-Z0-9]{6,20})$/.exec(p)) && m === 'GET') {
+    if (limited('giftchk|' + ip(req), 30, 10 * 60000)) return send(res, 429, { error: 'Too many tries. Wait a few minutes.' });
+    const g = db.giftcards.find((x) => x.code === mm[1]);
+    if (!g || g.valid < Date.now()) return send(res, 404, { error: 'That code is not valid.' });
+    return send(res, 200, { balance: g.balance, valid: g.valid });
+  }
+
+  /* ---- resend booking confirmation, newsletter ---- */
+  if (p === 'resend' && m === 'POST') {
+    const b = await body(req);
+    if (limited('resend|' + ip(req), 6, 60 * 60000)) return send(res, 429, { error: 'Too many requests. Try again later.' });
+    const id = String(b.id || '').trim().toUpperCase(), c = String(b.contact || '').trim().toLowerCase().replace(/\s|\+91/g, '');
+    const bk = db.bookings.find((x) => x.id === id && x.contact && (x.contact.email === c || x.contact.phone === c.slice(-10)));
+    if (bk) notifyTicket(bk).catch(() => {});
+    return send(res, 200, { ok: true }); // same answer either way
+  }
+  if (p === 'subscribe' && m === 'POST') {
+    const b = await body(req); const email = normEmail(b.email);
+    if (!emailOk(email)) return send(res, 400, { error: 'Enter a valid email.' });
+    if (limited('sub|' + ip(req), 5, 60 * 60000)) return send(res, 429, { error: 'Too many requests.' });
+    if (!db.subscribers.some((x) => x.email === email)) { db.subscribers.push({ email, city: String(b.city || '').slice(0, 30), at: Date.now() }); save(); }
+    return send(res, 200, { ok: true });
+  }
+
   /* ---- contact messages from the website ---- */
   if (p === 'contact' && m === 'POST') {
     const b = await body(req);
@@ -517,7 +580,7 @@ async function apiRoute(req, res, url) {
     sendMail(msg.email, 'We got your message · Lumen Cinemas', `Hi ${msg.name},\r\n\r\nThanks for writing to Lumen. We usually reply within one working day.\r\n\r\nYour message:\r\n${msg.message}\r\n\r\nLumen Cinemas`).catch(() => {});
     return send(res, 200, { ok: true, id: msg.id });
   }
-  if (p === 'admin/messages' && m === 'GET') { if (!need('admin')) return; return send(res, 200, { messages: db.messages }); }
+  if (p === 'admin/messages' && m === 'GET') { if (!need('admin')) return; return send(res, 200, { messages: db.messages, subscribers: db.subscribers.length, giftcards: db.giftcards.map(({ code, amount, balance, toEmail, fromName, at }) => ({ code, amount, balance, toEmail, fromName, at })) }); }
   if ((mm = /^admin\/messages\/([\w-]+)$/.exec(p)) && m === 'POST') {
     if (!need('admin')) return;
     const msg = db.messages.find((x) => x.id === mm[1]); if (!msg) return send(res, 404, { error: 'No such message.' });
@@ -747,6 +810,8 @@ async function apiRoute(req, res, url) {
   if (m === 'POST' && p === 'hold') {
     const { show, seats = [], client } = await body(req);
     if (!show || !client || !Array.isArray(seats) || seats.length > 12) return send(res, 400, { error: 'Bad request' });
+    const atCounter = counterSeats(show, seats);
+    if (atCounter.length) return send(res, 409, { error: 'These seats are sold only at the theatre counter.', taken: atCounter });
     const taken = seats.filter((s) => soldSeats(show).has(s) || heldByOthers(show, client).has(s));
     if (taken.length) return send(res, 409, { error: 'Some seats were just taken', taken });
     if (!holds.has(show)) holds.set(show, new Map());
@@ -766,9 +831,18 @@ async function apiRoute(req, res, url) {
     if (!b.id || !b.client || !b.kind) return send(res, 400, { error: 'Bad booking' });
     if (db.bookings.some((x) => x.id === b.id)) return send(res, 409, { error: 'Duplicate booking' });
     if (b.showId) {
+      const atCounter = counterSeats(b.showId, b.seats);
+      if (atCounter.length) return send(res, 409, { error: 'These seats are sold only at the theatre counter.', taken: atCounter });
       const taken = (b.seats || []).filter((s) => soldSeats(b.showId).has(s) || heldByOthers(b.showId, b.client).has(s));
       if (taken.length) return send(res, 409, { error: 'Some seats were just taken', taken });
       const hm = holds.get(b.showId); if (hm) for (const s of b.seats) hm.delete(s);
+    }
+    if (b.gift) {
+      // Gift card: take the amount off its balance (server checks it)
+      const g = db.giftcards.find((x) => x.code === String(b.gift.code || '').toUpperCase());
+      const amt = Math.round(+b.gift.amount || 0);
+      if (!g || g.valid < Date.now() || !(amt > 0) || amt > g.balance) return send(res, 400, { error: 'The gift card cannot be used. Check its balance.' });
+      g.balance -= amt; b.gift = { code: g.code, amount: amt };
     }
     if (u && u.role === 'customer') b.userId = u.id;
     db.bookings.unshift(b); save();

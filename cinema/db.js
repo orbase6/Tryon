@@ -7,7 +7,7 @@ import { setCustomLayouts, setPriceOverrides } from './layout.js';
 
 const LS = 'lumen.db';
 const blank = () => ({ movies: [], hiddenMovies: [], schedule: {}, theatres: {}, offers: null, fees: null, layouts: {}, prices: {}, bookings: [],
-  newTheatres: [], media: { movies: {}, theatres: {} }, banners: [], me: null, billing: null, lapsed: [], payments: [], cities: [], contact: {}, kycPublic: {} });
+  newTheatres: [], media: { movies: {}, theatres: {} }, banners: [], me: null, billing: null, lapsed: [], payments: [], cities: [], contact: {}, kycPublic: {}, events: [] });
 const clientId = (() => {
   try { let id = localStorage.getItem('lumen.client'); if (!id) { id = 'u' + Math.random().toString(36).slice(2, 10); localStorage.setItem('lumen.client', id); } return id; }
   catch (e) { return 'u' + Math.random().toString(36).slice(2, 10); }
@@ -81,6 +81,12 @@ export const db = {
   testSetting(kind, to) { return api('admin/settings/test', { method: 'POST', body: { kind, to } }); },
   mediaRequest(id, action) { return api('admin/media-requests/' + id, { method: 'POST', body: { action } }); },
   demoMedia(theatreId) { return api('admin/demo-media', { method: 'POST', body: { theatreId } }); },
+  reviews(movieId) { return api('reviews?movie=' + encodeURIComponent(movieId)); },
+  review(data) { return api('reviews', { method: 'POST', body: { ...data, client: this.client } }); },
+  giftBuy(data) { return api('giftcards', { method: 'POST', body: { ...data, client: this.client } }); },
+  giftCheck(code) { return api('giftcards/' + encodeURIComponent(code)); },
+  resend(id, contact) { return api('resend', { method: 'POST', body: { id, contact } }); },
+  subscribe(email, city) { return api('subscribe', { method: 'POST', body: { email, city } }); },
   startTrial(payToken) { return api('billing/trial', { method: 'POST', body: { payToken } }); },
 
   /* ---- partner plans (server only) ---- */
