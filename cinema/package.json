@@ -1,8 +1,0 @@
-{
-  "name": "lumen-cinemas",
-  "version": "1.0.0",
-  "private": true,
-  "description": "Movie booking with 3D seat views. No dependencies.",
-  "scripts": { "start": "node server.js" },
-  "engines": { "node": ">=18" }
-}

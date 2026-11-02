@@ -1,6 +1,0 @@
-nlu/data.json
-nlu/parity.json
-nlu/model.pt
-nlu/__pycache__/
-data/
-settings.env
