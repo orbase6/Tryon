@@ -278,7 +278,7 @@ export const EVENT_CATS = [
   { id: 'activities', en: 'Activities', ta: 'செயல்பாடுகள்', icon: 'pin', c1: '#2a2c36', c2: '#d99a00' },
 ];
 export const EVENTS = [
-  { id: 'kadalbeats', cat: 'events', title: 'Kadal Beats Live', kind: 'Concert', day: 6, hm: '1900', venue: 'Island Grounds', mins: 180, c1: '#2a0b3d', c2: '#ff2e88', about: 'An evening of indie Tamil and fusion bands by the sea.', tiers: [['Fan pit', 2499], ['Gold', 1499], ['Silver', 799]] },
+  { id: 'kadalbeats', cat: 'events', title: 'Kadal Beats Live', kind: 'Concert', day: 6, hm: '1900', venue: 'Island Grounds', mins: 180, c1: '#2a0b3d', c2: '#ff2e88', img: 'img/kadal-beats.jpg', about: 'An evening of indie Tamil and fusion bands by the sea.', tiers: [['Fan pit', 2499], ['Gold', 1499], ['Silver', 799]] },
   { id: 'madrasmornings', cat: 'events', title: 'Madras Mornings', kind: 'Stand-up comedy', day: 3, hm: '2000', venue: 'Lumen Studio', mins: 90, c1: '#3b1d00', c2: '#ffd400', about: 'Ninety minutes of jokes about filter coffee, traffic and family WhatsApp groups.', tiers: [['Front rows', 999], ['Regular', 599]] },
   { id: 'kuthukalai', cat: 'plays', title: 'Kuthu Kalai', kind: 'Tamil play', day: 2, hm: '1830', venue: 'Museum Theatre', mins: 120, c1: '#4a0d0d', c2: '#ff7a00', about: 'A street theatre troupe stages its last show before the hall is sold.', tiers: [['Balcony', 400], ['Stalls', 250]] },
   { id: 'paperboats', cat: 'plays', title: 'Paper Boats', kind: 'English play', day: 8, hm: '1930', venue: 'Alliance Hall', mins: 100, c1: '#0b2a4a', c2: '#a0d8ff', about: 'Two brothers, one monsoon and a box of letters nobody was meant to read.', tiers: [['Premium', 700], ['Standard', 450]] },

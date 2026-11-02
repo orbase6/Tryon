@@ -1,7 +1,7 @@
 // Lumen service worker: makes the site installable and keeps it working on a weak connection.
 // App files: network first (so updates show up), cache as backup. Pictures and the 3D library: cache first.
 // The API (seats, bookings, logins) is never cached.
-const VERSION = 'lumen-v1';
+const VERSION = 'lumen-v2';
 const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'data.js', 'layout.js', 'ui.js', 'map2d.js', 'agent.js', 'nlu.js', 'db.js', 'auth.js', 'media.js',
   'partner.js', 'console.js', 'admin.js', 'hall3d.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 
@@ -42,7 +42,7 @@ self.addEventListener('fetch', (e) => {
   if (url.origin === location.origin) {
     if (url.pathname.includes('/api/')) return; // live data only
     if (req.headers.has('range')) return;       // video streaming
-    if (/\/uploads\/|\/icons\/|nlu-model\.json$/.test(url.pathname)) return e.respondWith(cacheFirst(req));
+    if (/\/uploads\/|\/icons\/|\/img\/|nlu-model\.json$/.test(url.pathname)) return e.respondWith(cacheFirst(req));
     return e.respondWith(networkFirst(req));
   }
   if (/cdn\.jsdelivr\.net\/npm\/three@|fonts\.(googleapis|gstatic)\.com/.test(req.url)) e.respondWith(cacheFirst(req));

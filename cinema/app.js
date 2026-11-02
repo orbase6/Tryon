@@ -136,6 +136,8 @@ function slides(city, now) {
     return { img: b.image, title: b.title, sub: b.sub, href: mv ? `#movie-${mv.id}` : b.theatreId ? `#theatre-${b.theatreId}` : '#home', by: b.theatreId ? theatreById(b.theatreId)?.name : '', book: mv && isNowShowing(mv) ? mv.id : '' };
   });
   for (const m of now.filter((x) => x.banner)) out.push({ img: m.banner, title: m.title, sub: `${m.lang} · ${m.cert} · ${mins(m.mins)}`, href: `#movie-${m.id}`, book: m.id, trailer: m.trailer ? m.id : '' });
+  // Events with a picture are featured too
+  for (const e of EVENTS.filter((x) => x.img)) out.push({ img: e.img, title: e.title, sub: `${e.kind} · ${fmtDate(addDays(today(), e.day))} · ${hmLabel(e.hm)} · ${e.venue}`, href: `#event-${e.id}`, by: L('Live event', 'நேரலை நிகழ்வு'), cta: L('Get tickets', 'டிக்கெட் வாங்க') });
   return out.slice(0, 6);
 }
 function homeView() {
@@ -153,7 +155,7 @@ function homeView() {
   const heroHTML = sl.length ? `<section class="carousel" aria-roledescription="carousel" aria-label="Featured">
       <div class="car-track" id="carTrack">${sl.map((x, i) => `<article class="slide" aria-label="${i + 1} of ${sl.length}"><img src="${esc(x.img)}" alt="" ${i ? 'loading="lazy"' : 'fetchpriority="high"'} decoding="async">
         <div class="slide-txt">${x.by ? `<small class="eyebrow">${esc(x.by)}</small>` : ''}<h2>${esc(x.title)}</h2>${x.sub ? `<p>${esc(x.sub)}</p>` : ''}
-        <div class="hero-cta">${x.book ? `<button type="button" class="btn primary" data-book="${x.book}">${icon('ticket')}${t('book')}</button>` : `<a class="btn primary" href="${x.href}">${L('See more', 'மேலும்')}${icon('right')}</a>`}${x.trailer ? `<button type="button" class="btn glass" data-trailer="${x.trailer}">${icon('play')}${L('Trailer', 'டிரெய்லர்')}</button>` : ''}</div></div></article>`).join('')}</div>
+        <div class="hero-cta">${x.book ? `<button type="button" class="btn primary" data-book="${x.book}">${icon('ticket')}${t('book')}</button>` : `<a class="btn primary" href="${x.href}">${x.cta ? icon('ticket') + x.cta : L('See more', 'மேலும்') + icon('right')}</a>`}${x.trailer ? `<button type="button" class="btn glass" data-trailer="${x.trailer}">${icon('play')}${L('Trailer', 'டிரெய்லர்')}</button>` : ''}</div></div></article>`).join('')}</div>
       ${sl.length > 1 ? `<div class="car-dots">${sl.map((_, i) => `<button type="button" data-slide="${i}" aria-label="Slide ${i + 1}" aria-current="${i === 0}"></button>`).join('')}</div>` : ''}</section>`
     : `<section class="hero" style="--c1:${hero.c1};--c2:${hero.c2}">
       <div class="hero-art">${poster(hero, { big: true })}</div>
@@ -901,13 +903,13 @@ function catView(id) {
   const c = EVENT_CATS.find((x) => x.id === id); if (!c) return homeView();
   const list = EVENTS.filter((e) => e.cat === id);
   view.innerHTML = `<div class="topbar"><h1 class="tb-t">${esc(tx(c))}</h1></div>
-    <div class="rail" style="grid-auto-flow:row;grid-template-columns:repeat(auto-fill,minmax(220px,1fr))">${list.map((e) => `<a class="ecard" href="#event-${e.id}" style="--c1:${e.c1};--c2:${e.c2};min-height:180px"><span class="e-ic">${icon(c.icon)}</span><small>${esc(e.kind)}</small><b>${esc(e.title)}</b><small>${fmtDate(addDays(today(), e.day))} · ${hmLabel(e.hm)} · ${esc(e.venue)}</small><small>${t('from', { p: inr(Math.min(...e.tiers.map((x) => x[1]))) })}</small></a>`).join('')}</div>`;
+    <div class="rail" style="grid-auto-flow:row;grid-template-columns:repeat(auto-fill,minmax(220px,1fr))">${list.map((e) => `<a class="ecard${e.img ? ' has-img' : ''}" href="#event-${e.id}" style="--c1:${e.c1};--c2:${e.c2};min-height:180px">${e.img ? `<img class="ec-img" src="${e.img}" alt="" loading="lazy">` : ''}<span class="e-ic">${icon(c.icon)}</span><small>${esc(e.kind)}</small><b>${esc(e.title)}</b><small>${fmtDate(addDays(today(), e.day))} · ${hmLabel(e.hm)} · ${esc(e.venue)}</small><small>${t('from', { p: inr(Math.min(...e.tiers.map((x) => x[1]))) })}</small></a>`).join('')}</div>`;
 }
 function eventView(id) {
   const ev = eventById(id); if (!ev) return homeView();
   const tiers = {};
   view.innerHTML = `<div class="topbar"><a class="iconbtn" href="#cat-${ev.cat}" aria-label="${t('back')}">${icon('back')}</a></div>
-    <section class="ev-head" style="--c1:${ev.c1};--c2:${ev.c2}"><small>${esc(ev.kind)}</small><h1>${esc(ev.title)}</h1>
+    <section class="ev-head${ev.img ? ' has-img' : ''}" style="--c1:${ev.c1};--c2:${ev.c2}">${ev.img ? `<img class="ec-img" src="${ev.img}" alt="" decoding="async">` : ''}<small>${esc(ev.kind)}</small><h1>${esc(ev.title)}</h1>
       <p class="meta">${icon('clock')} ${fmtDate(addDays(today(), ev.day))} · ${hmLabel(ev.hm)} · ${Math.round(ev.mins / 60 * 10) / 10} h</p><p class="meta">${icon('pin')} ${esc(ev.venue)}, ${esc(tx(CITIES.find((c) => c.id === app.city())))}</p><p class="about">${esc(ev.about)}</p></section>
     <h2 class="sec">${state.lang === 'ta' ? 'டிக்கெட் வகைகள்' : 'Choose tickets'}</h2>
     <div class="tiers">${ev.tiers.map(([n, p]) => `<div class="tier"><span><b>${esc(n)}</b><small>${inr(p)}</small></span><span class="stepper"><button type="button" data-t="${esc(n)}" data-d="-1" aria-label="Less">${icon('minus')}</button><output data-o="${esc(n)}">0</output><button type="button" data-t="${esc(n)}" data-d="1" aria-label="More">${icon('plus')}</button></span></div>`).join('')}</div>
