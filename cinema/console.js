@@ -81,6 +81,8 @@ function banners(host, ctx) {
     host.innerHTML = `<div class="sec-row"><h2 class="sec">Banners</h2><div class="filters">${[['pending', 'To review'], ['live', 'Live'], ['scheduled', 'Starts later'], ['rejected', 'Rejected'], ['expired', 'Ended'], ['all', 'All']].map(([k, l]) => `<button type="button" class="fchip" data-f="${k}" aria-pressed="${filter === k}">${l} (${k === 'all' ? all.length : all.filter((b) => bannerState(b) === k).length})</button>`).join('')}</div></div>
       ${list.length ? `<div class="bn-list">${list.map((b) => `<article class="bn-item">${bannerPreview(b)}<div class="bn-meta">${chip(...STATUS[bannerState(b)])}<small><b>${by(b)}</b> · ${b.placement === 'theatre' ? 'Theatre page' : 'Home page'} · ${esc(b.from || 'now')} → ${esc(b.to || 'no end')}${b.movieId && movieById(b.movieId) ? ' · links to ' + esc(movieById(b.movieId).title) : ''}</small>${b.note ? `<small>Note: ${esc(b.note)}</small>` : ''}
         <span class="acts">${b.status !== 'live' ? `<button type="button" class="btn primary sm" data-bs="live" data-id="${b.id}">${icon('check')}Approve</button>` : ''}${b.status !== 'rejected' ? `<button type="button" class="btn ghost sm danger" data-bs="rejected" data-id="${b.id}">${b.status === 'live' ? 'Take down' : 'Reject'}</button>` : ''}<button type="button" class="btn ghost sm danger" data-bdel="${b.id}">${icon('trash')}</button></span></div></article>`).join('')}</div>` : '<p class="empty">Nothing here.</p>'}
+      <section class="panel narrow"><h2>Try it with sample pictures</h2><p class="muted">Adds a cover photo, 4 hall photos and 2 banners to a theatre: one banner live on the home page, one waiting for your approval. Then open the theatre page and the home page to see them.</p>
+        <div class="row-btns"><span class="dd"><select id="smTh" aria-label="Theatre">${CITIES.flatMap((c) => theatresFor(c.id, { all: true }).map((t) => `<option value="${t.id}">${esc(t.name)} · ${esc(t.area)}, ${esc(c.en)}</option>`)).join('')}</select></span><button type="button" class="btn ghost" id="smGo">${icon('image')}Load samples</button></div></section>
       <section class="panel narrow"><h2>Lumen banner (goes live right away)</h2>
         ${uploadBox({ id: 'upLB', label: 'Banner image', hint: '1600 × 600 works best', value: draft.image, ratio: '8 / 3' })}
         <label class="af"><span>Title</span><input class="input" id="lbT" maxlength="60" value="${esc(draft.title)}"></label>
@@ -94,6 +96,11 @@ function banners(host, ctx) {
     }));
     host.querySelectorAll('[data-bdel]').forEach((b) => b.addEventListener('click', async () => { if (!confirm('Delete this banner?')) return; try { await db.deleteBanner(b.dataset.bdel); render(); } catch (x) { toast(x.message); } }));
     const keep = () => { draft.title = $('#lbT').value.trim(); draft.sub = $('#lbS').value.trim(); };
+    $('#smGo').addEventListener('click', async (e) => {
+      e.currentTarget.disabled = true;
+      try { await db.demoMedia($('#smTh').value); await db.refresh(); filter = 'pending'; toast('Samples added. One banner is waiting for you below; the other is already live.'); render(); }
+      catch (x) { toast(x.message); e.currentTarget.disabled = false; }
+    });
     bindUpload(host, 'upLB', db, (url) => { keep(); draft.image = url; render(); });
     $('#lbGo').addEventListener('click', async () => {
       keep(); if (!draft.image || draft.title.length < 3) { $('#lbErr').textContent = 'Upload an image and add a title.'; return; }

@@ -80,6 +80,7 @@ export const db = {
   saveSettings(v) { return api('admin/settings', { method: 'PUT', body: v }); },
   testSetting(kind, to) { return api('admin/settings/test', { method: 'POST', body: { kind, to } }); },
   mediaRequest(id, action) { return api('admin/media-requests/' + id, { method: 'POST', body: { action } }); },
+  demoMedia(theatreId) { return api('admin/demo-media', { method: 'POST', body: { theatreId } }); },
   startTrial(payToken) { return api('billing/trial', { method: 'POST', body: { payToken } }); },
 
   /* ---- partner plans (server only) ---- */

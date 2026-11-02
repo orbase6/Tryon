@@ -43,12 +43,13 @@ function fillOf(show) {
   const lay = layoutOf(show), booked = bookedFor(show, lay, app.mySeats(show.id));
   const sellable = lay.seats.filter((x) => !x.disabled), taken = sellable.filter((x) => booked.has(x.id)).length;
   const k = sellable.length ? taken / sellable.length : 1;
-  const st = taken >= sellable.length ? 'full' : k >= 0.85 ? 'almost' : k >= 0.6 ? 'fast' : 'avail';
+  // green under half sold, orange from half, red from 70% sold, grey when nothing is left
+  const st = taken >= sellable.length ? 'full' : k >= 0.7 ? 'almost' : k >= 0.5 ? 'fast' : 'avail';
   const out = { st, left: sellable.length - taken, k };
   if (fillCache.size > 500) fillCache.clear();
   fillCache.set(key, out); return out;
 }
-const timeTag = (s, inner, extra = '') => { const f = fillOf(s); return f.st === 'full' ? `<span class="time full" aria-disabled="true" title="Sold out">${inner}<small class="so">Sold out</small></span>` : `<a class="time ${extra || f.st}" href="#show-${s.id}" title="${f.left} seats left">${inner}</a>`; };
+const timeTag = (s, inner, extra = '') => { const f = fillOf(s); return f.st === 'full' ? `<span class="time full" aria-disabled="true" title="Sold out">${inner}<small class="so">Sold out</small></span>` : `<a class="time ${extra || f.st}" href="#show-${s.id}" title="${f.left} seats left">${inner}${f.st === 'almost' ? `<small class="left">${f.left} left</small>` : ''}</a>`; };
 const showStart = (show) => { const d = fromKey(show.dk); d.setHours(+show.hm.slice(0, 2), +show.hm.slice(2), 0, 0); return d; };
 const LANG3 = { Tamil: 'TAM', English: 'ENG', Telugu: 'TEL', Hindi: 'HIN', Malayalam: 'MAL' };
 

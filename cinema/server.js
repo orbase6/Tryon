@@ -677,6 +677,24 @@ async function apiRoute(req, res, url) {
     else return send(res, 400, { error: 'Unknown action' });
     save(); return send(res, 200, { ok: true, media: db.media.movies[r.movieId] });
   }
+  // Admin: load the sample photos and banners from img/samples into one theatre, to see the whole flow
+  if (p === 'admin/demo-media' && m === 'POST') {
+    if (!need('admin')) return;
+    const { theatreId } = await body(req);
+    if (!/^c\d+t\d+$/.test(theatreId || '')) return send(res, 400, { error: 'Pick a theatre.' });
+    const src = path.join(ROOT, 'img', 'samples'); fs.mkdirSync(UPLOADS, { recursive: true });
+    const put = (f) => { const name = uid(12) + '.jpg'; fs.copyFileSync(path.join(src, f), path.join(UPLOADS, name)); return 'uploads/' + name; };
+    try {
+      db.media.theatres[theatreId] = { ...(db.media.theatres[theatreId] || {}), cover: put('cover-hall.jpg'), photos: ['photo-seats.jpg', 'photo-imax.jpg', 'photo-lounge.jpg', 'photo-balcony.jpg'].map(put) };
+      const day = (n) => new Date(Date.now() + n * DAY).toISOString().slice(0, 10);
+      const ci = +theatreId.match(/^c(\d+)/)[1], cityId = BASE_CITIES[ci] || db.cities[ci - BASE_CITIES.length]?.id || null;
+      const mk = (o) => ({ id: uid(), theatreId, cityId, movieId: null, from: day(0), to: day(14), note: '', by: u.id, createdAt: Date.now(), ...o });
+      db.banners.unshift(
+        mk({ image: put('banner-recliners.jpg'), title: 'Recliner nights', sub: 'Lie back for the late show · food served at your seat', placement: 'home', status: 'live' }),
+        mk({ image: put('banner-imax-marathon.jpg'), title: 'Weekend IMAX marathon', sub: '3 movies back to back · free popcorn refill', placement: 'theatre', status: 'pending' }));
+    } catch (e) { return send(res, 500, { error: 'Sample files are missing in img/samples.' }); }
+    save(); return send(res, 200, { ok: true });
+  }
   if (p === 'banners' && m === 'POST') {
     if (!need('staff')) return;
     const b = await body(req);
