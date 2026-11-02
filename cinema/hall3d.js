@@ -32,6 +32,7 @@ export async function mountHall(host, lay, { movie, booked, selected, tier = 'mi
   controls.enableDamping = !low; controls.dampingFactor = 0.1;
   controls.minDistance = 0.5; controls.maxDistance = 34; controls.rotateSpeed = 0.6;
   const { CZ, W, H, front, back, screen } = lay;
+  let video = null, vtex = null, soundBtn = null;
   const geos = [], mats = [], texs = [];
   const track = (o) => { if (o.geometry) geos.push(o.geometry); return o; };
   const mat = (opt) => { const m = low ? new THREE.MeshLambertMaterial(opt) : new THREE.MeshStandardMaterial({ roughness: 0.85, metalness: 0, ...opt }); mats.push(m); return m; };
@@ -127,6 +128,23 @@ export async function mountHall(host, lay, { movie, booked, selected, tier = 'mi
     for (let i = 0; i < p.count; i++) { const x = p.getX(i) / (screen.w / 2); p.setZ(i, x * x * screen.curve); }
     const m = new THREE.MeshBasicMaterial({ map: stx, toneMapped: false, color: '#e8e8e8' }); mats.push(m);
     const o = track(new THREE.Mesh(g, m)); o.position.set(0, screen.y, screen.z); scene.add(o);
+    // The movie's trailer plays on the theatre screen (muted until the person turns sound on)
+    if (movie.trailer) {
+      video = document.createElement('video');
+      Object.assign(video, { src: movie.trailer, muted: true, loop: true, playsInline: true, preload: 'auto', crossOrigin: 'anonymous' });
+      video.setAttribute('playsinline', '');
+      video.addEventListener('playing', () => {
+        if (!vtex) { vtex = new THREE.VideoTexture(video); vtex.colorSpace = THREE.SRGBColorSpace; texs.push(vtex); m.map = vtex; m.needsUpdate = true; }
+        kick();
+      });
+      video.play().catch(() => {});
+      soundBtn = document.createElement('button');
+      soundBtn.type = 'button'; soundBtn.className = 'h3-sound'; soundBtn.setAttribute('aria-pressed', 'false');
+      const label = () => { soundBtn.innerHTML = video.muted ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M17 9l4 6M21 9l-4 6"/></svg>Trailer sound' : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></svg>Mute'; soundBtn.setAttribute('aria-pressed', String(!video.muted)); };
+      label();
+      soundBtn.addEventListener('click', (e) => { e.stopPropagation(); video.muted = !video.muted; if (video.paused) video.play().catch(() => {}); label(); });
+      host.appendChild(soundBtn);
+    }
     const black = new THREE.MeshBasicMaterial({ color: '#030304' }); mats.push(black);
     const mask = track(new THREE.Mesh(new THREE.PlaneGeometry(2 * W, H), black)); mask.position.set(0, H / 2, screen.z - 0.08); scene.add(mask);
   }
@@ -259,7 +277,9 @@ export async function mountHall(host, lay, { movie, booked, selected, tier = 'mi
     const changed = controls.update();
     keepInside(camera.position); camera.lookAt(controls.target);
     renderer.render(scene, camera);
-    if (moving || changed || now < idleUntil) kick();
+    // keep drawing while the trailer plays (about 30 frames a second is enough for video)
+    const playing = video && vtex && !video.paused && !document.hidden;
+    if (moving || changed || now < idleUntil) kick(); else if (playing) setTimeout(kick, tier === 'low' ? 60 : 30);
   }
   function kick() { if (!raf && alive) raf = requestAnimationFrame(frame); }
   controls.addEventListener('change', () => { idleUntil = performance.now() + 300; kick(); });
@@ -299,6 +319,7 @@ export async function mountHall(host, lay, { movie, booked, selected, tier = 'mi
     resize,
     dispose() {
       alive = false; cancelAnimationFrame(raf); ro.disconnect(); controls.dispose();
+      if (video) { video.pause(); video.removeAttribute('src'); video.load(); } soundBtn?.remove();
       people.children.forEach((c) => c.dispose());
       geos.forEach((g) => g.dispose()); mats.forEach((m) => m.dispose()); texs.forEach((t) => t.dispose());
       for (const m of lists.keys()) m.dispose();

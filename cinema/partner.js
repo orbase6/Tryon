@@ -279,14 +279,16 @@ function shows(host, th, ctx) {
     $('#addForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const err = $('#aErr'); err.textContent = '';
-      if (!own) { err.textContent = 'Switch to your own schedule first (button above).'; return; }
       const mv = movieById($('#aMovie').dataset.value); if (!mv) { err.textContent = 'Pick a movie.'; return; }
       const times = $('#aTimes').value.split(/[,\s]+/).filter(Boolean);
       const bad = times.filter((x) => !/^([01]?\d|2[0-3]):[0-5]\d$/.test(x));
       if (!times.length || bad.length) { err.textContent = `Write times like 10:00, 18:45${bad.length ? ` (check: ${bad.join(', ')})` : ''}.`; return; }
       const n = Math.max(1, Math.min(14, +$('#aDays').value || 1));
       const from = fromKey($('#aFrom').value);
-      const cur = sch()[sc.id]; const next = [...cur.shows]; const clashes = [];
+      // First time: copy the suggested schedule for the next 14 days so nothing disappears
+      let cur = sch()[sc.id];
+      if (!cur || !cur.custom) { const copy = []; for (let i = 0; i < 14; i++) { const k = dayKey(addDays(today(), i)); screenDay(sc, ci, k).forEach((x) => copy.push({ dk: k, hm: x.hm, movieId: x.movie.id })); } cur = { custom: true, shows: copy }; }
+      const next = [...cur.shows]; const clashes = [];
       for (let i = 0; i < n; i++) {
         const k = dayKey(addDays(from, i));
         if (fromKey(k) < releaseDate(mv)) { clashes.push(`${fmtDate(fromKey(k))}: ${mv.title} is not released yet`); continue; }
@@ -298,7 +300,7 @@ function shows(host, th, ctx) {
           else next.push({ dk: k, hm, movieId: mv.id });
         }
       }
-      if (clashes.length && next.length === cur.shows.length) { err.textContent = clashes.slice(0, 4).join(' · '); return; }
+      if (clashes.length && next.length === cur.shows.length) { err.textContent = `No shows added: these times overlap shows already on this screen. Remove those shows (✕ on the left) or choose other times. ${clashes.slice(0, 3).join(' · ')}`; return; }
       await save({ ...sch(), [sc.id]: { ...cur, shows: next } }, `${next.length - cur.shows.length} shows added.${clashes.length ? ` ${clashes.length} skipped because they overlap.` : ''}`);
     });
   }

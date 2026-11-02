@@ -35,6 +35,20 @@ let cleanup = [];
 const onLeave = (fn) => cleanup.push(fn);
 const money = (v) => '₹' + (Math.round(v * 100) / 100).toLocaleString('en-IN', { minimumFractionDigits: v % 1 ? 2 : 0, maximumFractionDigits: 2 });
 const endTime = (hm, mins) => { const tot = +hm.slice(0, 2) * 60 + +hm.slice(2) + mins + 15; const h = Math.floor(tot / 60) % 24, m = tot % 60; return hmLabel(String(h).padStart(2, '0') + String(m).padStart(2, '0')); };
+// How full a show really is, from the same seat map the customer sees
+const fillCache = new Map();
+function fillOf(show) {
+  const key = show.id + '|' + db.allBookings().length;
+  if (fillCache.has(key)) return fillCache.get(key);
+  const lay = layoutOf(show), booked = bookedFor(show, lay, app.mySeats(show.id));
+  const sellable = lay.seats.filter((x) => !x.disabled), taken = sellable.filter((x) => booked.has(x.id)).length;
+  const k = sellable.length ? taken / sellable.length : 1;
+  const st = taken >= sellable.length ? 'full' : k >= 0.85 ? 'almost' : k >= 0.6 ? 'fast' : 'avail';
+  const out = { st, left: sellable.length - taken, k };
+  if (fillCache.size > 500) fillCache.clear();
+  fillCache.set(key, out); return out;
+}
+const timeTag = (s, inner, extra = '') => { const f = fillOf(s); return f.st === 'full' ? `<span class="time full" aria-disabled="true" title="Sold out">${inner}<small class="so">Sold out</small></span>` : `<a class="time ${extra || f.st}" href="#show-${s.id}" title="${f.left} seats left">${inner}</a>`; };
 const showStart = (show) => { const d = fromKey(show.dk); d.setHours(+show.hm.slice(0, 2), +show.hm.slice(2), 0, 0); return d; };
 const LANG3 = { Tamil: 'TAM', English: 'ENG', Telugu: 'TEL', Hindi: 'HIN', Malayalam: 'MAL' };
 
@@ -325,7 +339,7 @@ function showsView(id) {
       <button type="button" class="fchip" id="fLate" aria-pressed="${SF.late}">${icon('clock')}${state.lang === 'ta' ? 'இரவுக் காட்சிகள்' : 'Late night shows'}</button>
       <button type="button" class="fchip" id="fEarly" aria-pressed="${SF.early}">${icon('clock')}${state.lang === 'ta' ? 'அதிகாலைக் காட்சிகள்' : 'Early morning shows'}</button>
     </div>
-    <div class="legend-line"><span><i style="background:var(--ok)"></i>${t('avail').toUpperCase()}</span><span><i style="background:var(--warn)"></i>${t('fast').toUpperCase()}</span><span><i style="background:var(--bad)"></i>${t('almost').toUpperCase()}</span></div>
+    <div class="legend-line"><span><i style="background:var(--t-av)"></i>${t('avail').toUpperCase()}</span><span><i style="background:var(--t-fast)"></i>${t('fast').toUpperCase()}</span><span><i style="background:var(--bad)"></i>${t('almost').toUpperCase()}</span><span><i style="background:var(--t-full)"></i>${state.lang === 'ta' ? 'நிரம்பியது' : 'SOLD OUT'}</span></div>
     <div id="theatreList"></div>`;
   const list = $('#theatreList');
   const lowPrice = (s) => Math.min(...Object.values(pricesOf(s)));
@@ -354,8 +368,7 @@ function showsView(id) {
         <div class="th-feat"><span class="ok">${icon('check')}${state.lang === 'ta' ? 'ரத்து செய்யலாம்' : 'Cancellation available'}</span><span>${icon('popcorn')}${state.lang === 'ta' ? 'உணவு' : 'Food & beverages'}</span><span>${icon('ticket')}M-Ticket</span>${th.amen.includes('Wheelchair access') ? `<span>${icon('wheel')}${t('wheelchair')}</span>` : ''}<a class="link" href="#theatre-${th.id}">${t('hall')} ${icon('right')}</a></div>
         <div class="times">${ss.map((s) => {
           const lo = lowPrice(s) + FEE_PER_TICKET;
-          const st = s.occ > 0.8 ? 'almost' : s.occ > 0.6 ? 'fast' : 'avail';
-          return `<a class="time ${st}" href="#show-${s.id}" title="${t(st)}"><b>${hmLabel(s.hm)} <small>${LANG3[s.lang] || ''}</small></b><small>${esc(s.fmt)} · ${state.lang === 'ta' ? 'முடிவு' : 'ends'} ${endTime(s.hm, m.mins)}</small><small>${t('from', { p: inr(lo) })}${+s.hm < 1200 ? ' · ☀ saver' : ''}</small>${+s.hm >= 2100 ? `<span class="moon">${icon('clock')}</span>` : ''}</a>`;
+          return timeTag(s, `<b>${hmLabel(s.hm)} <small>${LANG3[s.lang] || ''}</small></b><small>${esc(s.fmt)} · ${state.lang === 'ta' ? 'முடிவு' : 'ends'} ${endTime(s.hm, m.mins)}</small><small>${t('from', { p: inr(lo) })}${+s.hm < 1200 ? ' · ☀ saver' : ''}</small>${+s.hm >= 2100 ? `<span class="moon">${icon('clock')}</span>` : ''}`);
         }).join('')}</div></article>`;
     }).join('') + `<p class="note">${icon('check')} ${t('all_in')}</p>`;
   }
@@ -388,7 +401,7 @@ function theatreView(id) {
         <div class="sc-body"><b>${esc(sc.name)} · ${esc(sc.fmt)}</b><small>${esc(tx(hallName(sc.id, sc.hall)))}${customFor(sc.id) ? ' · custom layout' : ''} · ${lay.seats.length} seats · ${lay.rows.length} rows · screen ${lay.screen.w} m wide</small>
         <div class="prices">${Object.entries(pricesFor(sc.id, sc.hall)).map(([k, p]) => `<span><i style="background:${CLASS_META[k].color}"></i>${esc(clsName(k))} ${inr(p)}</span>`).join('')}</div>
         <span class="mh-cta"><button type="button" class="btn ghost sm" data-explore="${sc.idx}">${icon('cube')}${t('explore')}</button>${canEdit ? `<a class="btn ghost sm" href="#admin-${sc.id}">${icon('grid')}${state.lang === 'ta' ? 'இருக்கை அமைப்பைத் திருத்து' : 'Edit seat layout'}</a>` : ''}</span>
-        ${ss.length ? `<div class="times">${ss.map((s) => `<a class="time avail" href="#show-${s.id}"><b>${hmLabel(s.hm)}</b><small>${esc(movieById(s.movieId).title)}</small></a>`).join('')}</div>` : ''}</div></article>`;
+        ${ss.length ? `<div class="times">${ss.map((s) => timeTag(s, `<b>${hmLabel(s.hm)}</b><small>${esc(movieById(s.movieId).title)}</small>`)).join('')}</div>` : ''}</div></article>`;
     }).join('')}</div>`;
   $('#thBack').addEventListener('click', () => (history.length > 1 ? history.back() : (location.hash = 'home')));
   view.querySelector('.screens').addEventListener('click', (e) => {
@@ -424,7 +437,7 @@ function seatsView(showId) {
     <div class="topbar seatbar"><a class="iconbtn" href="#shows-${m.id}" aria-label="${t('back')}">${icon('back')}</a>
       <div class="sb-t"><b>${esc(m.title)} (${esc(show.fmt)}) - ${esc(show.lang)}</b><small>${esc(th.name)}: ${esc(th.area)} | ${fmtDate(d)} | ${hmLabel(show.hm)}</small></div>
       <button type="button" class="btn ghost sm" id="countBtn"></button></div>
-    <div class="times inline">${sameDay.map((s) => `<a class="time ${s.id === show.id ? 'on' : s.occ > 0.8 ? 'almost' : s.occ > 0.6 ? 'fast' : 'avail'}" href="#show-${s.id}"><b>${hmLabel(s.hm)}</b><small>${esc(s.fmt)}</small></a>`).join('')}</div>
+    <div class="times inline">${sameDay.map((s) => timeTag(s, `<b>${hmLabel(s.hm)}</b><small>${esc(s.fmt)}</small>`, s.id === show.id ? 'on' : '')).join('')}</div>
     <div class="seat-layout">
       <section class="map-card">
         <div class="map-tools">

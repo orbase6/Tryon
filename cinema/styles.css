@@ -934,3 +934,24 @@ h1, h2, h3 { text-wrap: balance; margin: 0; }
 .ev-head.has-img { min-height: 280px; align-content: end; }
 .slide { aspect-ratio: auto; height: clamp(300px, 40vw, 460px); max-height: none; width: 100%; }
 @media (max-width: 640px) { .slide { height: 420px; } }
+.h3-sound { position: absolute; right: 10px; top: 10px; z-index: 3; display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 12px 0 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.3); background: rgba(10,11,15,0.65); color: #fff; font-size: 13px; font-weight: 700; }
+.h3-sound svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.h3-sound[aria-pressed="true"] { background: var(--yel); color: var(--ink); border-color: var(--yel); }
+#m3Host, #pvHost, #vwHost, .pv-host { position: relative; }
+
+/* showtime availability: filled colours (green / orange / red / grey when sold out) */
+:root { --t-av: #1f9d55; --t-fast: #e8820c; --t-full: #9aa0a6; }
+.time { border-width: 1.5px; }
+.time.avail { background: color-mix(in srgb, var(--t-av) 14%, var(--bg-2)); border-color: color-mix(in srgb, var(--t-av) 55%, transparent); }
+.time.fast { background: color-mix(in srgb, var(--t-fast) 16%, var(--bg-2)); border-color: color-mix(in srgb, var(--t-fast) 60%, transparent); }
+.time.almost { background: color-mix(in srgb, var(--red) 14%, var(--bg-2)); border-color: color-mix(in srgb, var(--red) 60%, transparent); }
+.time.avail b { color: color-mix(in srgb, var(--t-av) 75%, var(--fg)); }
+.time.fast b { color: color-mix(in srgb, var(--t-fast) 75%, var(--fg)); }
+.time.almost b { color: color-mix(in srgb, var(--red) 80%, var(--fg)); }
+.time.full { background: var(--card-2); border-color: var(--line); color: var(--dim); cursor: not-allowed; filter: none; opacity: 0.75; }
+.time.full b, .time.full small { color: var(--dim); text-decoration: none; }
+.time.full .so { font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; font-size: 10.5px; }
+.time.full:hover { filter: none; }
+.time.on { background: var(--yel); border-color: var(--yel); }
+.time.on b { color: var(--ink); }
+.legend-line i { border-radius: 4px; }
