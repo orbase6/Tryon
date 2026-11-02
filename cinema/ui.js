@@ -107,6 +107,10 @@ const P = {
   lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+  cup: '<path d="M6 8h12l-1.5 12a1 1 0 0 1-1 .9h-7a1 1 0 0 1-1-.9z"/><path d="M5 8h14M12 8l2-5h3"/>',
+  burger: '<path d="M4 11a8 6 0 0 1 16 0z"/><path d="M3 14h18M5 17h14a1 1 0 0 1-1 3H6a1 1 0 0 1-1-3z"/>',
+  nacho: '<path d="M12 3l9 17H3z"/><circle cx="11" cy="13" r="1" fill="currentColor"/><circle cx="14" cy="16" r="1" fill="currentColor"/>',
+  combo: '<rect x="3" y="9" width="18" height="11" rx="2"/><path d="M7 9l1-5h8l1 5M3 13h18"/>',
   fire: '<path d="M12 3c3 4 6 6.5 6 11a6 6 0 0 1-12 0c0-3 1.5-4.5 3-6 0 2 1 3 2 3-1-3 0-6 1-8z"/>',
   speaker: '<path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 9a4 4 0 0 1 0 6"/>', grid: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M4 15h16M10 4v16"/>',
 };

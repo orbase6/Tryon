@@ -265,13 +265,27 @@ export function hmLabel(hm) {
 }
 export function partOfDay(hm) { const h = +hm.slice(0, 2); return h < 12 ? 'morning' : h < 16 ? 'afternoon' : h < 20 ? 'evening' : 'night'; }
 
+// Food & beverages (cat: popcorn, beverages, snacks, combos). Prices include GST.
+export const SNACK_CATS = [['all', 'All', 'அனைத்தும்'], ['best', 'Bestsellers', 'அதிகம் விற்பனை'], ['popcorn', 'Popcorn', 'பாப்கார்ன்'], ['beverages', 'Beverages', 'பானங்கள்'], ['snacks', 'Snacks', 'சிற்றுண்டி'], ['combos', 'Combos', 'காம்போ']];
 export const SNACKS = [
-  { id: 'pop', en: 'Salted popcorn (L)', ta: 'உப்பு பாப்கார்ன் (L)', price: 280, tone: 'var(--yel-soft)' },
-  { id: 'car', en: 'Caramel popcorn (L)', ta: 'கேரமல் பாப்கார்ன் (L)', price: 320, tone: 'var(--card-2)' },
-  { id: 'nac', en: 'Nachos with cheese', ta: 'சீஸ் நாச்சோஸ்', price: 260, tone: 'var(--yel-soft)' },
-  { id: 'cof', en: 'Cold coffee', ta: 'குளிர் காபி', price: 220, tone: 'var(--card-2)' },
-  { id: 'cmb', en: 'Combo · 2 popcorn + 2 drinks', ta: 'காம்போ · 2 பாப்கார்ன் + 2 பானம்', price: 690, tone: 'var(--yel-soft)' },
+  { id: 'pop', en: 'Salted popcorn (L)', ta: 'உப்பு பாப்கார்ன் (L)', price: 280, tone: 'var(--yel-soft)', cat: 'popcorn', best: true, veg: true, note: 'Large tub · 90 g' },
+  { id: 'car', en: 'Caramel popcorn (L)', ta: 'கேரமல் பாப்கார்ன் (L)', price: 320, tone: 'var(--card-2)', cat: 'popcorn', best: true, veg: true, note: 'Large tub · 110 g' },
+  { id: 'chp', en: 'Cheese popcorn (M)', ta: 'சீஸ் பாப்கார்ன் (M)', price: 260, tone: 'var(--yel-soft)', cat: 'popcorn', veg: true, note: 'Medium tub · 70 g' },
+  { id: 'pps', en: 'Peri-peri popcorn (M)', ta: 'பெரி-பெரி பாப்கார்ன் (M)', price: 250, tone: 'var(--card-2)', cat: 'popcorn', veg: true, note: 'Medium tub · 70 g' },
+  { id: 'cof', en: 'Cold coffee', ta: 'குளிர் காபி', price: 220, tone: 'var(--card-2)', cat: 'beverages', best: true, veg: true, note: '350 ml' },
+  { id: 'pep', en: 'Soft drink (L)', ta: 'குளிர்பானம் (L)', price: 180, tone: 'var(--yel-soft)', cat: 'beverages', veg: true, note: '650 ml · your choice of flavour' },
+  { id: 'lim', en: 'Fresh lime soda', ta: 'லைம் சோடா', price: 150, tone: 'var(--card-2)', cat: 'beverages', veg: true, note: '400 ml · sweet or salted' },
+  { id: 'wat', en: 'Mineral water', ta: 'குடிநீர்', price: 60, tone: 'var(--yel-soft)', cat: 'beverages', veg: true, note: '500 ml bottle' },
+  { id: 'tea', en: 'Masala tea', ta: 'மசாலா டீ', price: 90, tone: 'var(--card-2)', cat: 'beverages', veg: true, note: 'Hot · 200 ml' },
+  { id: 'nac', en: 'Nachos with cheese', ta: 'சீஸ் நாச்சோஸ்', price: 260, tone: 'var(--yel-soft)', cat: 'snacks', best: true, veg: true, note: 'With salsa and cheese dip' },
+  { id: 'sam', en: 'Veg samosa (2 pcs)', ta: 'வெஜ் சமோசா (2)', price: 120, tone: 'var(--card-2)', cat: 'snacks', veg: true, note: 'With mint chutney' },
+  { id: 'brg', en: 'Chicken burger', ta: 'சிக்கன் பர்கர்', price: 240, tone: 'var(--yel-soft)', cat: 'snacks', veg: false, note: 'Crispy chicken, lettuce, mayo' },
+  { id: 'frs', en: 'French fries', ta: 'பிரெஞ்சு ஃப்ரைஸ்', price: 170, tone: 'var(--card-2)', cat: 'snacks', veg: true, note: 'Salted · regular' },
+  { id: 'cmb', en: 'Combo · 2 popcorn + 2 drinks', ta: 'காம்போ · 2 பாப்கார்ன் + 2 பானம்', price: 690, tone: 'var(--yel-soft)', cat: 'combos', best: true, veg: true, note: 'Save ₹230 on the items alone' },
+  { id: 'cm1', en: 'Solo combo · popcorn + drink', ta: 'தனி காம்போ', price: 390, tone: 'var(--card-2)', cat: 'combos', veg: true, note: 'Medium popcorn + soft drink' },
+  { id: 'cmf', en: 'Family combo · 3 popcorn + 3 drinks + nachos', ta: 'குடும்ப காம்போ', price: 1190, tone: 'var(--yel-soft)', cat: 'combos', veg: true, note: 'For 3 to 4 people' },
 ];
+export const SNACK_ICON = { popcorn: 'popcorn', beverages: 'cup', snacks: 'nacho', combos: 'combo' };
 export let FEE_PER_TICKET = 21; // fee + GST per ticket, shown all-in
 
 // Events, plays, sports and activities (fictional). day = days from today.

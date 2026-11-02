@@ -1,6 +1,6 @@
 // Lumen Cinemas: screens, routing and the full booking flow.
 import {
-  CITIES, MOVIES, CLASS_META, SNACKS, FEE_PER_TICKET, CONV_FEE, GST, COMMISSION, HOLD_MINUTES, OFFERS, EVENT_CATS, EVENTS, PREMIERES,
+  CITIES, MOVIES, CLASS_META, SNACKS, SNACK_CATS, SNACK_ICON, FEE_PER_TICKET, CONV_FEE, GST, COMMISSION, HOLD_MINUTES, OFFERS, EVENT_CATS, EVENTS, PREMIERES,
   movieById, eventById, premiereById, isNowShowing, theatresFor, theatreById, showsFor, showById, today, addDays, dayKey, fromKey,
   hmLabel, partOfDay, releaseDate, mulberry32, hash, leavingSoon, liveBanners, nearestCity, LIVE, cityById,
 } from './data.js';
@@ -126,6 +126,7 @@ function route() {
   if ((m = /^shows-([a-z0-9]+)$/.exec(h))) return showsView(m[1]);
   if ((m = /^show-([a-z0-9]+)$/.exec(h))) return seatsView(m[1]);
   if (h === 'pay') return payView();
+  if (h === 'food') return foodView();
   if ((m = /^theatre-(c\d+t\d+)$/.exec(h))) return theatreView(m[1]);
   if ((m = /^ticket-([A-Z0-9]+)$/.exec(h))) return ticketView(m[1]);
   if (h === 'tickets') return ticketsView();
@@ -801,24 +802,53 @@ function contactStep(order) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { sh.querySelector('#cErr').textContent = state.lang === 'ta' ? 'சரியான மின்னஞ்சலை உள்ளிடுங்கள்.' : 'Enter a valid email, like name@gmail.com.'; return; }
     if (!/^[6-9]\d{9}$/.test(phone)) { sh.querySelector('#cErr').textContent = state.lang === 'ta' ? '10 இலக்க மொபைல் எண்ணை உள்ளிடுங்கள்.' : 'Enter a 10-digit Indian mobile number.'; return; }
     S.contact = { email, phone }; store.set('contact', S.contact);
-    if (order.kind === 'movie') snackStep(order); else { currentOrder = order; closeSheet(); location.hash = 'pay'; }
+    currentOrder = order; closeSheet(); location.hash = order.kind === 'movie' ? 'food' : 'pay';
   }));
 }
-function snackStep(order) {
-  const cart = order.snacks;
-  const render = () => openSheet(`<h2 class="sh-t">${icon('popcorn')}${t('snacks')}</h2><p class="muted">${t('snacks_sub')}</p>
-    <div class="snacks">${SNACKS.map((s) => `<div class="snack"><span class="sn-ic" style="background:${s.tone}">${icon('popcorn')}</span><span><b>${esc(tx(s))}</b><small>${inr(s.price)}</small></span>
-    <span class="stepper"><button type="button" data-s="${s.id}" data-d="-1" aria-label="Less">${icon('minus')}</button><output>${cart[s.id] || 0}</output><button type="button" data-s="${s.id}" data-d="1" aria-label="More">${icon('plus')}</button></span></div>`).join('')}</div>
-    <div class="toggle-row"><span>${state.lang === 'ta' ? 'எப்போது வாங்குவீர்கள்?' : 'Pick up'}</span><span class="pickup">${[['start', state.lang === 'ta' ? 'படத்திற்கு முன்' : 'Before the show'], ['interval', state.lang === 'ta' ? 'இடைவேளையில்' : 'At the interval']].map(([k, l]) => `<button type="button" class="fchip" data-p="${k}" aria-pressed="${order.pickup === k}">${l}</button>`).join('')}</span></div>
-    <div class="sh-actions"><button type="button" class="btn ghost" data-go="skip">${t('skip')}</button><button type="button" class="btn primary" data-go="next">${t('next')}</button></div>`,
-  (sh) => sh.addEventListener('click', (e) => {
+// Food & beverages page (movies): categories, search, add / + / −, cart with the running total
+function foodView() {
+  const o = currentOrder;
+  if (!o || o.kind !== 'movie') { location.replace('#home'); return; }
+  const ta = state.lang === 'ta', cart = o.snacks;
+  let cat = 'all', q = '';
+  const show = showById(o.showId);
+  view.innerHTML = `<div class="topbar"><a class="iconbtn" href="${show ? '#show-' + show.id : '#home'}" aria-label="${t('back')}">${icon('back')}</a>
+      <div class="sb-t"><b>${esc(o.title)}</b><small>${esc(o.place)} | ${esc(o.sub)}</small></div></div>
+    <div class="fnb">
+      <section class="fnb-main">
+        <div class="fnb-h"><h1>${ta ? 'சாப்பிட ஏதாவது?' : 'Grab a bite!'}</h1><small class="muted">${ta ? 'இப்போதே ஆர்டர் செய்யுங்கள், வரிசையில் நிற்க வேண்டாம்' : 'Order now and skip the queue at the counter'}</small>
+          <label class="fnb-q">${icon('search')}<input id="fnbQ" placeholder="${ta ? 'தேடு' : 'Search food & drinks'}" aria-label="Search food"></label></div>
+        <div class="xchips fnb-cats" role="tablist">${SNACK_CATS.map(([id, en, tamil]) => `<button type="button" class="fchip" data-cat="${id}" aria-pressed="${id === cat}">${esc(ta ? tamil : en)}</button>`).join('')}</div>
+        <div class="fnb-grid" id="fnbGrid"></div>
+      </section>
+      <aside class="fnb-cart" id="fnbCart"></aside>
+    </div>`;
+  const qty = () => Object.values(cart).reduce((a, n) => a + n, 0);
+  function drawGrid() {
+    const list = SNACKS.filter((x) => (cat === 'all' || (cat === 'best' ? x.best : x.cat === cat)) && (!q || (x.en + ' ' + x.ta + ' ' + x.note).toLowerCase().includes(q)));
+    $('#fnbGrid').innerHTML = list.map((x) => `<article class="fnb-item"><span class="fnb-art" style="background:${x.tone}">${icon(SNACK_ICON[x.cat] || 'popcorn')}${x.best ? `<em>${ta ? 'அதிகம் விற்பனை' : 'Bestseller'}</em>` : ''}</span>
+      <div class="fnb-b"><span class="veg ${x.veg ? 'v' : 'nv'}" title="${x.veg ? 'Veg' : 'Non-veg'}"></span><b>${esc(tx(x))}</b><small>${esc(x.note)}</small>
+      <div class="fnb-f"><b>${inr(x.price)}</b>${cart[x.id] ? `<span class="stepper"><button type="button" data-s="${x.id}" data-d="-1" aria-label="Less">${icon('minus')}</button><output>${cart[x.id]}</output><button type="button" data-s="${x.id}" data-d="1" aria-label="More">${icon('plus')}</button></span>` : `<button type="button" class="btn ghost sm fnb-add" data-s="${x.id}" data-d="1">${ta ? 'சேர்' : 'Add'}</button>`}</div></div></article>`).join('') || `<p class="empty">${ta ? 'எதுவும் இல்லை' : 'Nothing matches. Try another word.'}</p>`;
+  }
+  function drawCart() {
+    const p = priceOrder(o, {}), items = SNACKS.filter((x) => cart[x.id]);
+    $('#fnbCart').innerHTML = `<h2>${ta ? 'சுருக்கம்' : 'Order summary'}</h2>
+      <div class="fc-row"><span>${ta ? 'டிக்கெட்' : 'Tickets'} · ${o.qty}<small>${esc(o.seats.join(', '))}</small></span><b>${inr(p.base + p.conv + p.gst)}</b></div>
+      ${items.map((x) => `<div class="fc-row"><span>${esc(tx(x))} × ${cart[x.id]}</span><b>${inr(x.price * cart[x.id])}</b></div>`).join('')}
+      ${items.length ? `<div class="toggle-row"><span>${ta ? 'எப்போது வாங்குவீர்கள்?' : 'Pick up'}</span><span class="pickup">${[['start', ta ? 'படத்திற்கு முன்' : 'Before the show'], ['interval', ta ? 'இடைவேளையில்' : 'At the interval']].map(([k, l]) => `<button type="button" class="fchip" data-p="${k}" aria-pressed="${o.pickup === k}">${l}</button>`).join('')}</span></div>` : `<p class="muted small">${ta ? 'உணவு சேர்க்கப்படவில்லை' : 'No food added yet.'}</p>`}
+      <div class="fc-row fc-tot"><span>${ta ? 'தற்போதைய மொத்தம்' : 'Current total'}</span><b>${inr(p.total)}</b></div>
+      <div class="fc-act"><button type="button" class="btn ghost" data-go="skip">${items.length ? (ta ? 'உணவை நீக்கு' : 'Remove food') : (ta ? 'தவிர்' : 'Skip')}</button><button type="button" class="btn primary" data-go="next">${ta ? 'தொடர்' : 'Proceed'}${qty() ? ` · ${inr(p.total)}` : ''}${icon('right')}</button></div>`;
+  }
+  drawGrid(); drawCart();
+  view.addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
-    if (b.dataset.s) { cart[b.dataset.s] = Math.max(0, Math.min(9, (cart[b.dataset.s] || 0) + +b.dataset.d)); render(); }
-    if (b.dataset.p) { order.pickup = b.dataset.p; render(); }
-    if (b.dataset.go === 'skip') { Object.keys(cart).forEach((k) => delete cart[k]); }
-    if (b.dataset.go) { currentOrder = order; closeSheet(); location.hash = 'pay'; }
-  }));
-  render();
+    if (b.dataset.cat) { cat = b.dataset.cat; $$('.fnb-cats button').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); drawGrid(); return; }
+    if (b.dataset.s) { cart[b.dataset.s] = Math.max(0, Math.min(9, (cart[b.dataset.s] || 0) + +b.dataset.d)); if (!cart[b.dataset.s]) delete cart[b.dataset.s]; drawGrid(); drawCart(); return; }
+    if (b.dataset.p) { o.pickup = b.dataset.p; drawCart(); return; }
+    if (b.dataset.go === 'skip') { if (qty()) { Object.keys(cart).forEach((k) => delete cart[k]); drawGrid(); drawCart(); return; } location.hash = 'pay'; return; }
+    if (b.dataset.go === 'next') location.hash = 'pay';
+  });
+  $('#fnbQ').addEventListener('input', (e) => { q = e.target.value.trim().toLowerCase(); drawGrid(); });
 }
 
 /* ---------- payment page ---------- */
